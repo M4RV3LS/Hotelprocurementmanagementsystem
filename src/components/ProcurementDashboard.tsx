@@ -29,7 +29,7 @@ interface TableRow {
   propertyCode: string;
   status: string;
   itemName: string;
-  itemProperties: string;
+
   quantity: number;
   uom: string;
   requestDate: string;
@@ -90,15 +90,7 @@ export default function ProcurementDashboard({
 
     requests.forEach((request) => {
       request.items.forEach((item, index) => {
-        const properties = Object.entries(
-          item.selectedProperties,
-        )
-          .map(([key, value]) => value)
-          .join(", ");
-
-        const itemDisplay = properties
-          ? `${item.itemName} - ${properties}`
-          : item.itemName;
+        const itemDisplay = item.itemName;
 
         rows.push({
           prNumber: request.prNumber,
@@ -106,7 +98,7 @@ export default function ProcurementDashboard({
           propertyCode: request.propertyCode,
           status: item.status, // ALWAYS use item status
           itemName: itemDisplay,
-          itemProperties: properties,
+
           quantity: item.quantity,
           uom: item.uom,
           requestDate: request.prDate,

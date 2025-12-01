@@ -37,14 +37,11 @@ export default function ItemDetailSection({
     selectedVendorData?.paymentMethods || [];
 
   // FILTER VENDORS Logic
-  // 1. Must be active
-  // 2. Must serve the region of the requested item
-  // 3. Must have the requested item configured (by itemCode)
   const filteredVendors = useMemo(() => {
     return vendors.filter((vendor) => {
       const isActive = vendor.isActive;
 
-      // Handle Region Match (vendorRegion is string[])
+      // Handle Region Match
       const hasRegion = Array.isArray(vendor.vendorRegion)
         ? vendor.vendorRegion.includes(item.region)
         : vendor.vendorRegion === item.region;
@@ -57,15 +54,6 @@ export default function ItemDetailSection({
       return isActive && hasRegion && hasItem;
     });
   }, [item.region, item.itemCode]);
-
-  const getItemDisplayName = () => {
-    const properties = Object.entries(item.selectedProperties)
-      .map(([key, value]) => value)
-      .join(", ");
-    return properties
-      ? `${item.itemName} - ${properties}`
-      : item.itemName;
-  };
 
   const getItemStatusBadge = (itemStatus: string) => {
     const colors = {
@@ -86,7 +74,6 @@ export default function ItemDetailSection({
       (v) => v.vendorName === selectedVendor,
     );
 
-    // Find matching vendor item config
     const vendorItem = vendor?.items.find(
       (vi) => vi.itemCode === item.itemCode,
     );
@@ -97,7 +84,6 @@ export default function ItemDetailSection({
       paymentTerms: selectedPaymentMethod as PaymentTerms,
     };
 
-    // CHECK IF VENDOR HAS FIXED PRICE
     if (vendorItem && vendorItem.unitPrice > 0) {
       const taxRate = vendor?.ppnPercentage || 11;
       const unitPrice = vendorItem.unitPrice;
@@ -112,19 +98,18 @@ export default function ItemDetailSection({
         taxAmount,
         totalPrice,
         itemStatus: "Ready",
-        isFixedPrice: true, // LOCK PRICE
+        isFixedPrice: true,
       };
     } else {
-      // Manual Price Required
       const taxRate = vendor?.ppnPercentage || 11;
       updatedItem = {
         ...updatedItem,
-        unitPrice: undefined, // Reset price if moving to non-fixed vendor
+        unitPrice: undefined,
         taxPercentage: taxRate,
         taxAmount: 0,
         totalPrice: 0,
         itemStatus: "Not Set",
-        isFixedPrice: false, // ALLOW EDITING
+        isFixedPrice: false,
       };
     }
 
@@ -144,7 +129,7 @@ export default function ItemDetailSection({
       taxAmount,
       totalPrice,
       itemStatus: "Ready",
-      isFixedPrice: false, // Ensure it stays manual
+      isFixedPrice: false,
     });
     setIsEditingPrice(false);
   };
@@ -153,7 +138,6 @@ export default function ItemDetailSection({
   const hasPrice =
     item.unitPrice !== undefined && item.unitPrice > 0;
 
-  // ALLOW RE-ASSIGNMENT if status is Review or Waiting PO
   const canReassignVendor =
     requestStatus === "Review by Procurement" ||
     requestStatus === "Waiting PO";
@@ -170,8 +154,8 @@ export default function ItemDetailSection({
             <span className="text-gray-600 w-48">
               Item Name:
             </span>
-            <span className="text-gray-900">
-              {getItemDisplayName()}
+            <span className="text-gray-900 font-medium text-lg">
+              {item.itemName}
             </span>
           </div>
 
@@ -231,7 +215,6 @@ export default function ItemDetailSection({
       <div>
         <div className="flex items-center justify-between mb-3 border-b border-gray-300 pb-2">
           <h4 className="text-gray-900">VENDOR INFORMATION</h4>
-          {/* Allow Re-assignment */}
           {hasVendorAssigned &&
             canReassignVendor &&
             !showVendorForm && (
@@ -244,13 +227,11 @@ export default function ItemDetailSection({
             )}
         </div>
 
-        {/* Show Vendor Form if (Review status AND No Vendor) OR (Change Vendor clicked) */}
         {(!hasVendorAssigned &&
           requestStatus === "Review by Procurement") ||
         showVendorForm ? (
           <div className="bg-gray-50 rounded-lg p-4 space-y-4">
             <div className="space-y-4">
-              {/* Vendor Selection */}
               <div>
                 <label className="block text-gray-700 mb-2">
                   Vendor <span className="text-red-500">*</span>
@@ -280,7 +261,6 @@ export default function ItemDetailSection({
                 )}
               </div>
 
-              {/* Payment Terms */}
               <div>
                 <label className="block text-gray-700 mb-2">
                   Payment Terms{" "}
@@ -324,7 +304,6 @@ export default function ItemDetailSection({
                 <button
                   onClick={() => {
                     setShowVendorForm(false);
-                    // Reset to current item state on cancel
                     setSelectedVendor(item.vendorName || "");
                     setSelectedPaymentMethod(
                       item.paymentTerms || "",
@@ -347,7 +326,6 @@ export default function ItemDetailSection({
             </div>
           </div>
         ) : (
-          /* Read-Only Vendor Info */
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             {hasVendorAssigned ? (
               <>
@@ -395,7 +373,6 @@ export default function ItemDetailSection({
           PRICING INFORMATION
         </h4>
 
-        {/* Scenario: No Price Set yet */}
         {!hasPrice ? (
           <div className="bg-gray-50 rounded-lg p-6">
             {hasVendorAssigned ? (
@@ -467,7 +444,6 @@ export default function ItemDetailSection({
             )}
           </div>
         ) : (
-          /* Scenario: Price is Set (Fixed or Manual) */
           <div className="bg-gray-50 rounded-lg p-4 space-y-3">
             {item.isFixedPrice ? (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
@@ -507,8 +483,6 @@ export default function ItemDetailSection({
               )}
             </div>
 
-            {/* Tax Row Removed as requested */}
-
             <div className="border-t border-gray-300 pt-3 flex justify-between">
               <span className="text-gray-900 font-medium">
                 Total Price:
@@ -518,7 +492,6 @@ export default function ItemDetailSection({
               </span>
             </div>
 
-            {/* EDIT BUTTON: Hide if price is fixed */}
             {!isEditingPrice &&
               !item.isFixedPrice &&
               canReassignVendor && (

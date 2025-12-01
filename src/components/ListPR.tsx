@@ -1,20 +1,39 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Download, Eye } from "lucide-react";
 import {
-  procurementRequests,
+  procurementRequests as initialRequests, // Rename to initialRequests for clarity
   type ProcurementRequest,
 } from "../data/mockData";
 import RequestDetailModal from "./RequestDetailModal";
-import StatusBadge from "./StatusBadge";
 
-export default function ListPR() {
+// Interface for props to receive DB data and update functions
+interface ListPRProps {
+  requests?: ProcurementRequest[];
+  onRequestsUpdate?: (requests: ProcurementRequest[]) => void;
+}
+
+export default function ListPR({
+  requests: externalRequests,
+  onRequestsUpdate,
+}: ListPRProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
   const [selectedRequest, setSelectedRequest] =
     useState<ProcurementRequest | null>(null);
-  const [requests, setRequests] = useState(procurementRequests);
+
+  // Initialize with props (DB data) or fallback to mock
+  const [requests, setRequests] = useState(
+    externalRequests || initialRequests,
+  );
+
+  // 1. SYNC: Update local state when parent data (DB) changes
+  useEffect(() => {
+    if (externalRequests) {
+      setRequests(externalRequests);
+    }
+  }, [externalRequests]);
 
   // Filter and sort PR list
   const filteredAndSortedPRs = useMemo(() => {
@@ -67,26 +86,31 @@ export default function ListPR() {
   }, [searchQuery, statusFilter, sortBy, requests]);
 
   const handleViewPR = (pr: ProcurementRequest) => {
-    // This would open the request detail modal (to be implemented)
     setSelectedRequest(pr);
   };
 
   const handleDownloadPR = (pr: ProcurementRequest) => {
-    // This would trigger PR download
     console.log("Download PR:", pr.prNumber);
   };
 
+  // 2. SYNC: Handle updates from the Modal and propagate to DB
   const handleUpdateRequest = (
     updatedRequest: ProcurementRequest,
   ) => {
-    setRequests((prev) =>
-      prev.map((req) =>
-        req.prNumber === updatedRequest.prNumber
-          ? updatedRequest
-          : req,
-      ),
+    const updatedList = requests.map((req) =>
+      req.prNumber === updatedRequest.prNumber
+        ? updatedRequest
+        : req,
     );
+
+    // Update local view immediately
+    setRequests(updatedList);
     setSelectedRequest(updatedRequest);
+
+    // Propagate to Parent (App.tsx) -> Database
+    if (onRequestsUpdate) {
+      onRequestsUpdate(updatedList);
+    }
   };
 
   const formatDate = (date: string) => {
@@ -95,16 +119,6 @@ export default function ListPR() {
       month: "short",
       year: "numeric",
     });
-  };
-
-  const getRequestSummaryStatus = (
-    request: ProcurementRequest,
-  ) => {
-    const statuses = new Set(
-      request.items.map((i) => i.status),
-    );
-    if (statuses.size === 1) return Array.from(statuses)[0];
-    return "Mixed Status";
   };
 
   return (
@@ -213,7 +227,7 @@ export default function ListPR() {
             {filteredAndSortedPRs.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={6}
                   className="px-6 py-12 text-center"
                 >
                   <div className="flex flex-col items-center gap-3">

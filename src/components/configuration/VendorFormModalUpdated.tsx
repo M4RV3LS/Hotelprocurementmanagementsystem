@@ -22,7 +22,7 @@ interface VendorFormModalProps {
 interface VendorItem {
   itemCode: string;
   itemName: string;
-  selectedProperties: Record<string, string>;
+
   minQuantity: number;
   multipleOf: number;
   priceType: "Fixed" | "Not Fixed";
@@ -81,7 +81,7 @@ export default function VendorFormModal({
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
     itemName: "",
-    selectedProperties: {},
+
     minQuantity: 1,
     multipleOf: 1,
     priceType: "Fixed",
@@ -109,7 +109,7 @@ export default function VendorFormModal({
       setNewItem({
         itemCode: selectedItem.itemCode,
         itemName: selectedItem.itemName,
-        selectedProperties: {},
+
         minQuantity: 1,
         multipleOf: 1,
         priceType: "Fixed",
@@ -118,19 +118,6 @@ export default function VendorFormModal({
         taxPercentage: formData.ppnPercentage,
       });
     }
-  };
-
-  const handlePropertySelect = (
-    propertyName: string,
-    value: string,
-  ) => {
-    setNewItem((prev) => ({
-      ...prev,
-      selectedProperties: {
-        ...prev.selectedProperties,
-        [propertyName]: value,
-      },
-    }));
   };
 
   const handleAddItemToVendor = () => {
@@ -170,7 +157,7 @@ export default function VendorFormModal({
     setNewItem({
       itemCode: "",
       itemName: "",
-      selectedProperties: {},
+
       minQuantity: 1,
       multipleOf: 1,
       priceType: "Fixed",
@@ -755,19 +742,10 @@ export default function VendorFormModal({
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {vendorItems.map((item, index) => {
-                        const properties = Object.entries(
-                          item.selectedProperties,
-                        )
-                          .map(([key, value]) => value)
-                          .join(", ");
-                        const itemDisplay = properties
-                          ? `${item.itemName} - ${properties}`
-                          : item.itemName;
-
                         return (
                           <tr key={index}>
                             <td className="px-4 py-3 text-gray-900">
-                              {itemDisplay}
+                              {item.itemName}
                             </td>
                             <td className="px-4 py-3 text-gray-700">
                               {item.minQuantity}

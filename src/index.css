@@ -1503,12 +1503,6 @@
   }
 
   @media (hover: hover) {
-    .hover\:text-blue-900:hover {
-      color: var(--color-blue-900);
-    }
-  }
-
-  @media (hover: hover) {
     .hover\:text-gray-600:hover {
       color: var(--color-gray-600);
     }

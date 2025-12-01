@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
-import { items } from '../../data/mockData';
-import type { Vendor } from './VendorManagement';
+import { useState } from "react";
+import { X, Plus, Trash2 } from "lucide-react";
+import { items } from "../../data/mockData";
+import type { Vendor } from "./VendorManagement";
 
 interface VendorFormModalProps {
   vendor: Vendor | null;
@@ -12,95 +12,99 @@ interface VendorFormModalProps {
 interface VendorItem {
   itemCode: string;
   itemName: string;
-  selectedProperties: Record<string, string>;
+
   minQuantity: number;
   unitPrice: number;
   taxRate: string;
 }
 
 const taxRates = [
-  'ID (VAT: 11%)',
-  '0% Tax Exempt',
-  'SG (GST: 9%)',
-  'IN (GST: 18%)',
-  'PH (VAT: 12%)'
+  "ID (VAT: 11%)",
+  "0% Tax Exempt",
+  "SG (GST: 9%)",
+  "IN (GST: 18%)",
+  "PH (VAT: 12%)",
 ];
 
-export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormModalProps) {
+export default function VendorFormModal({
+  vendor,
+  onClose,
+  onSave,
+}: VendorFormModalProps) {
   const [formData, setFormData] = useState<Vendor>(
     vendor || {
-      vendorCode: '',
-      vendorName: '',
-      vendorIsland: '',
-      vendorAddress: '',
-      vendorEmail: '',
-      vendorPhone: '',
-      vendorAgreementLink: '',
+      vendorCode: "",
+      vendorName: "",
+      vendorIsland: "",
+      vendorAddress: "",
+      vendorEmail: "",
+      vendorPhone: "",
+      vendorAgreementLink: "",
       items: [],
-      isActive: true
-    }
+      isActive: true,
+    },
   );
 
-  const [vendorItems, setVendorItems] = useState<VendorItem[]>(vendor?.items || []);
+  const [vendorItems, setVendorItems] = useState<VendorItem[]>(
+    vendor?.items || [],
+  );
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItem, setNewItem] = useState<VendorItem>({
-    itemCode: '',
-    itemName: '',
-    selectedProperties: {},
+    itemCode: "",
+    itemName: "",
+
     minQuantity: 1,
     unitPrice: 0,
-    taxRate: ''
+    taxRate: "",
   });
 
   // Filter to show only active items
-  const activeItems = items.filter(item => item.isActive);
+  const activeItems = items.filter((item) => item.isActive);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleItemSelect = (itemCode: string) => {
-    const selectedItem = items.find((i) => i.itemCode === itemCode);
+    const selectedItem = items.find(
+      (i) => i.itemCode === itemCode,
+    );
     if (selectedItem) {
       setNewItem({
         itemCode: selectedItem.itemCode,
         itemName: selectedItem.itemName,
-        selectedProperties: {},
+
         minQuantity: 1,
         unitPrice: 0,
-        taxRate: ''
+        taxRate: "",
       });
     }
   };
 
-  const handlePropertySelect = (propertyName: string, value: string) => {
-    setNewItem((prev) => ({
-      ...prev,
-      selectedProperties: {
-        ...prev.selectedProperties,
-        [propertyName]: value
-      }
-    }));
-  };
-
   const handleAddItemToVendor = () => {
     // Unit price is now optional, so we only require itemCode, minQuantity, and taxRate
-    if (newItem.itemCode && newItem.minQuantity > 0 && newItem.taxRate) {
+    if (
+      newItem.itemCode &&
+      newItem.minQuantity > 0 &&
+      newItem.taxRate
+    ) {
       setVendorItems((prev) => [...prev, newItem]);
       setNewItem({
-        itemCode: '',
-        itemName: '',
-        selectedProperties: {},
+        itemCode: "",
+        itemName: "",
+
         minQuantity: 1,
         unitPrice: 0,
-        taxRate: ''
+        taxRate: "",
       });
       setShowAddItem(false);
     }
   };
 
   const handleRemoveItem = (index: number) => {
-    setVendorItems((prev) => prev.filter((_, i) => i !== index));
+    setVendorItems((prev) =>
+      prev.filter((_, i) => i !== index),
+    );
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -108,23 +112,30 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
     // Merge vendorItems into formData before saving
     onSave({
       ...formData,
-      items: vendorItems
+      items: vendorItems,
     });
   };
 
-  const selectedItemData = items.find((i) => i.itemCode === newItem.itemCode);
+  const selectedItemData = items.find(
+    (i) => i.itemCode === newItem.itemCode,
+  );
 
   const getItemDisplayName = (item: VendorItem) => {
-    const properties = Object.entries(item.selectedProperties)
+    const properties = Object.entries(item.itemName)
       .map(([key, value]) => `${value}`)
-      .join(', ');
-    return properties ? `${item.itemName} - ${properties}` : item.itemName;
+      .join(", ");
+    return properties
+      ? `${item.itemName} - ${properties}`
+      : item.itemName;
   };
 
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-black bg-opacity-50 z-50"
+        onClick={onClose}
+      />
 
       {/* Modal */}
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
@@ -132,7 +143,9 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
             <h3 className="text-gray-900">
-              {vendor ? `Edit Vendor - ${vendor.vendorName}` : 'Add New Vendor'}
+              {vendor
+                ? `Edit Vendor - ${vendor.vendorName}`
+                : "Add New Vendor"}
             </h3>
             <button
               onClick={onClose}
@@ -147,17 +160,25 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
             <div className="px-6 py-6 space-y-8">
               {/* Section 1: Basic Vendor Information */}
               <div>
-                <h4 className="text-gray-900 mb-4">Basic Vendor Information</h4>
+                <h4 className="text-gray-900 mb-4">
+                  Basic Vendor Information
+                </h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-gray-700 mb-2">
-                      Vendor Code <span className="text-red-500">*</span>
+                      Vendor Code{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={formData.vendorCode}
-                      onChange={(e) => handleInputChange('vendorCode', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorCode",
+                          e.target.value,
+                        )
+                      }
                       disabled={!!vendor}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
                     />
@@ -165,26 +186,38 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
 
                   <div>
                     <label className="block text-gray-700 mb-2">
-                      Vendor Name <span className="text-red-500">*</span>
+                      Vendor Name{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={formData.vendorName}
-                      onChange={(e) => handleInputChange('vendorName', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorName",
+                          e.target.value,
+                        )
+                      }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
                   </div>
 
                   <div>
                     <label className="block text-gray-700 mb-2">
-                      Vendor Island/Region <span className="text-red-500">*</span>
+                      Vendor Island/Region{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       required
                       value={formData.vendorIsland}
-                      onChange={(e) => handleInputChange('vendorIsland', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorIsland",
+                          e.target.value,
+                        )
+                      }
                       placeholder="e.g., Java, Bali, Sumatra"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
@@ -192,25 +225,37 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
 
                   <div>
                     <label className="block text-gray-700 mb-2">
-                      Vendor Phone <span className="text-red-500">*</span>
+                      Vendor Phone{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="tel"
                       required
                       value={formData.vendorPhone}
-                      onChange={(e) => handleInputChange('vendorPhone', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorPhone",
+                          e.target.value,
+                        )
+                      }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
                   </div>
 
                   <div className="col-span-2">
                     <label className="block text-gray-700 mb-2">
-                      Vendor Address <span className="text-red-500">*</span>
+                      Vendor Address{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <textarea
                       required
                       value={formData.vendorAddress}
-                      onChange={(e) => handleInputChange('vendorAddress', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorAddress",
+                          e.target.value,
+                        )
+                      }
                       rows={2}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
@@ -218,13 +263,19 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
 
                   <div>
                     <label className="block text-gray-700 mb-2">
-                      Vendor Email <span className="text-red-500">*</span>
+                      Vendor Email{" "}
+                      <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
                       required
                       value={formData.vendorEmail}
-                      onChange={(e) => handleInputChange('vendorEmail', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorEmail",
+                          e.target.value,
+                        )
+                      }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
                   </div>
@@ -236,7 +287,12 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                     <input
                       type="url"
                       value={formData.vendorAgreementLink}
-                      onChange={(e) => handleInputChange('vendorAgreementLink', e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "vendorAgreementLink",
+                          e.target.value,
+                        )
+                      }
                       placeholder="https://"
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     />
@@ -247,7 +303,9 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
               {/* Section 2: Vendor Item/SKU Configuration */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-gray-900">Vendor Item/SKU Configuration</h4>
+                  <h4 className="text-gray-900">
+                    Vendor Item/SKU Configuration
+                  </h4>
                   <button
                     type="button"
                     onClick={() => setShowAddItem(!showAddItem)}
@@ -264,54 +322,36 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                     {/* Select Item */}
                     <div>
                       <label className="block text-gray-700 mb-2">
-                        Choose Item <span className="text-red-500">*</span>
+                        Choose Item{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <select
                         value={newItem.itemCode}
-                        onChange={(e) => handleItemSelect(e.target.value)}
+                        onChange={(e) =>
+                          handleItemSelect(e.target.value)
+                        }
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                       >
                         <option value="">Select an item</option>
                         {activeItems.map((item) => (
-                          <option key={item.itemCode} value={item.itemCode}>
+                          <option
+                            key={item.itemCode}
+                            value={item.itemCode}
+                          >
                             {item.itemName} ({item.itemCode})
                           </option>
                         ))}
                       </select>
                     </div>
 
-                    {/* Item Specification */}
-                    {selectedItemData && selectedItemData.properties.length > 0 && (
-                      <div className="grid grid-cols-2 gap-4">
-                        {selectedItemData.properties.map((property) => (
-                          <div key={property.name}>
-                            <label className="block text-gray-700 mb-2">
-                              {property.name} <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={newItem.selectedProperties[property.name] || ''}
-                              onChange={(e) =>
-                                handlePropertySelect(property.name, e.target.value)
-                              }
-                              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                            >
-                              <option value="">Select {property.name}</option>
-                              {property.values.map((value) => (
-                                <option key={value} value={value}>
-                                  {value}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
                     {/* Pricing Details */}
                     <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-gray-700 mb-2">
-                          Minimum Quantity <span className="text-red-500">*</span>
+                          Minimum Quantity{" "}
+                          <span className="text-red-500">
+                            *
+                          </span>
                         </label>
                         <input
                           type="number"
@@ -320,7 +360,8 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                           onChange={(e) =>
                             setNewItem((prev) => ({
                               ...prev,
-                              minQuantity: parseInt(e.target.value) || 1
+                              minQuantity:
+                                parseInt(e.target.value) || 1,
                             }))
                           }
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
@@ -329,7 +370,10 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
 
                       <div>
                         <label className="block text-gray-700 mb-2">
-                          Item Unit Price (IDR) <span className="text-gray-500">(Optional)</span>
+                          Item Unit Price (IDR){" "}
+                          <span className="text-gray-500">
+                            (Optional)
+                          </span>
                         </label>
                         <input
                           type="number"
@@ -339,23 +383,33 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                           onChange={(e) =>
                             setNewItem((prev) => ({
                               ...prev,
-                              unitPrice: parseFloat(e.target.value) || 0
+                              unitPrice:
+                                parseFloat(e.target.value) || 0,
                             }))
                           }
                           placeholder="Leave empty if price varies"
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                         />
-                        <p className="text-sm text-gray-500 mt-1">Leave empty if price is negotiated per order</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                          Leave empty if price is negotiated per
+                          order
+                        </p>
                       </div>
 
                       <div>
                         <label className="block text-gray-700 mb-2">
-                          VHT/WHT Tax <span className="text-red-500">*</span>
+                          VHT/WHT Tax{" "}
+                          <span className="text-red-500">
+                            *
+                          </span>
                         </label>
                         <select
                           value={newItem.taxRate}
                           onChange={(e) =>
-                            setNewItem((prev) => ({ ...prev, taxRate: e.target.value }))
+                            setNewItem((prev) => ({
+                              ...prev,
+                              taxRate: e.target.value,
+                            }))
                           }
                           className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                         >
@@ -398,10 +452,18 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                           <th className="px-4 py-3 text-left text-gray-700">
                             Item Name + Properties
                           </th>
-                          <th className="px-4 py-3 text-left text-gray-700">Min Qty</th>
-                          <th className="px-4 py-3 text-left text-gray-700">Unit Price</th>
-                          <th className="px-4 py-3 text-left text-gray-700">Tax Rate</th>
-                          <th className="px-4 py-3 text-right text-gray-700">Actions</th>
+                          <th className="px-4 py-3 text-left text-gray-700">
+                            Min Qty
+                          </th>
+                          <th className="px-4 py-3 text-left text-gray-700">
+                            Unit Price
+                          </th>
+                          <th className="px-4 py-3 text-left text-gray-700">
+                            Tax Rate
+                          </th>
+                          <th className="px-4 py-3 text-right text-gray-700">
+                            Actions
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -410,15 +472,22 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
                             <td className="px-4 py-3 text-gray-900">
                               {getItemDisplayName(item)}
                             </td>
-                            <td className="px-4 py-3 text-gray-700">{item.minQuantity}</td>
                             <td className="px-4 py-3 text-gray-700">
-                              Rp {item.unitPrice.toLocaleString()}
+                              {item.minQuantity}
                             </td>
-                            <td className="px-4 py-3 text-gray-700">{item.taxRate}</td>
+                            <td className="px-4 py-3 text-gray-700">
+                              Rp{" "}
+                              {item.unitPrice.toLocaleString()}
+                            </td>
+                            <td className="px-4 py-3 text-gray-700">
+                              {item.taxRate}
+                            </td>
                             <td className="px-4 py-3 text-right">
                               <button
                                 type="button"
-                                onClick={() => handleRemoveItem(index)}
+                                onClick={() =>
+                                  handleRemoveItem(index)
+                                }
                                 className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -433,7 +502,8 @@ export default function VendorFormModal({ vendor, onClose, onSave }: VendorFormM
 
                 {vendorItems.length === 0 && !showAddItem && (
                   <div className="text-center py-8 text-gray-500">
-                    No items configured yet. Click "Add Item to Vendor" to get started.
+                    No items configured yet. Click "Add Item to
+                    Vendor" to get started.
                   </div>
                 )}
               </div>

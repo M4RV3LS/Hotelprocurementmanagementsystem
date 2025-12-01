@@ -1,9 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
-import { Plus, Edit2 } from 'lucide-react';
-import ItemFormModal from './ItemFormModal';
-import ConfirmationModal from './ConfirmationModal';
-import Toast from '../Toast';
-import Toggle from '../Toggle';
+import { useState, useMemo, useEffect } from "react";
+import { Plus, Edit2 } from "lucide-react";
+import ItemFormModal from "./ItemFormModal";
+import ConfirmationModal from "./ConfirmationModal";
+import Toast from "../Toast";
+import Toggle from "../Toggle";
 
 export type Item = {
   itemCode: string;
@@ -11,10 +11,7 @@ export type Item = {
   brandName: string;
   itemCategory: string;
   uom: string;
-  properties: Array<{
-    name: string;
-    values: string[];
-  }>;
+
   isActive: boolean;
 };
 
@@ -24,16 +21,27 @@ interface ItemConfigurationProps {
   onDeleteItem: (itemCode: string) => Promise<void>;
 }
 
-export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: ItemConfigurationProps) {
+export default function ItemConfiguration({
+  items,
+  onSaveItem,
+  onDeleteItem,
+}: ItemConfigurationProps) {
   const [itemsList, setItemsList] = useState<Item[]>(items);
   const [showModal, setShowModal] = useState(false);
-  const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [editingItem, setEditingItem] = useState<Item | null>(
+    null,
+  );
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'activate' | 'deactivate';
+    type: "activate" | "deactivate";
     item: Item;
   } | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "active" | "inactive"
+  >("all");
 
   // Sync with props when they change
   useEffect(() => {
@@ -42,9 +50,10 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
 
   // Filter items based on status
   const filteredItems = useMemo(() => {
-    if (filterStatus === 'all') return itemsList;
-    if (filterStatus === 'active') return itemsList.filter(item => item.isActive);
-    return itemsList.filter(item => !item.isActive);
+    if (filterStatus === "all") return itemsList;
+    if (filterStatus === "active")
+      return itemsList.filter((item) => item.isActive);
+    return itemsList.filter((item) => !item.isActive);
   }, [itemsList, filterStatus]);
 
   const handleAddItem = () => {
@@ -59,8 +68,8 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
 
   const handleToggleActive = (item: Item) => {
     setConfirmAction({
-      type: item.isActive ? 'deactivate' : 'activate',
-      item
+      type: item.isActive ? "deactivate" : "activate",
+      item,
     });
   };
 
@@ -68,62 +77,64 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
     if (!confirmAction) return;
 
     const { type, item } = confirmAction;
-    
+
     try {
       // Update the item's active status
       const updatedItem = { ...item, isActive: !item.isActive };
       await onSaveItem(updatedItem);
-      
+
       // Update local state
       setItemsList((prev) =>
         prev.map((i) =>
-          i.itemCode === item.itemCode ? updatedItem : i
-        )
+          i.itemCode === item.itemCode ? updatedItem : i,
+        ),
       );
 
       setToast({
-        message: `Item ${type === 'activate' ? 'activated' : 'deactivated'} successfully`,
-        type: 'success'
+        message: `Item ${type === "activate" ? "activated" : "deactivated"} successfully`,
+        type: "success",
       });
 
       setTimeout(() => setToast(null), 5000);
     } catch (error) {
-      console.error('Error toggling item status:', error);
+      console.error("Error toggling item status:", error);
       setToast({
         message: `Failed to ${type} item`,
-        type: 'error'
+        type: "error",
       });
       setTimeout(() => setToast(null), 5000);
     }
-    
+
     setConfirmAction(null);
   };
 
   const handleSaveItem = async (item: Item) => {
     try {
       await onSaveItem(item);
-      
+
       if (editingItem) {
         // Update existing
         setItemsList((prev) =>
-          prev.map((i) => (i.itemCode === editingItem.itemCode ? item : i))
+          prev.map((i) =>
+            i.itemCode === editingItem.itemCode ? item : i,
+          ),
         );
       } else {
         // Add new
         setItemsList((prev) => [...prev, item]);
       }
       setShowModal(false);
-      
+
       setToast({
-        message: `Item ${editingItem ? 'updated' : 'created'} successfully`,
-        type: 'success'
+        message: `Item ${editingItem ? "updated" : "created"} successfully`,
+        type: "success",
       });
       setTimeout(() => setToast(null), 5000);
     } catch (error) {
-      console.error('Error saving item:', error);
+      console.error("Error saving item:", error);
       setToast({
-        message: `Failed to ${editingItem ? 'update' : 'create'} item`,
-        type: 'error'
+        message: `Failed to ${editingItem ? "update" : "create"} item`,
+        type: "error",
       });
       setTimeout(() => setToast(null), 5000);
     }
@@ -138,7 +149,11 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
           {/* Filter Dropdown */}
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+            onChange={(e) =>
+              setFilterStatus(
+                e.target.value as "all" | "active" | "inactive",
+              )
+            }
             className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
           >
             <option value="all">All</option>
@@ -162,48 +177,66 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-gray-700">Item Code</th>
-                <th className="px-6 py-3 text-left text-gray-700">Item Name</th>
-                <th className="px-6 py-3 text-left text-gray-700">Brand Name</th>
-                <th className="px-6 py-3 text-left text-gray-700">Category</th>
-                <th className="px-6 py-3 text-left text-gray-700">UoM</th>
-                <th className="px-6 py-3 text-left text-gray-700">Properties</th>
-                <th className="px-6 py-3 text-left text-gray-700">Status</th>
-                <th className="px-6 py-3 text-right text-gray-700">Actions</th>
+                <th className="px-6 py-3 text-left text-gray-700">
+                  Item Code
+                </th>
+                <th className="px-6 py-3 text-left text-gray-700">
+                  Item Name
+                </th>
+                <th className="px-6 py-3 text-left text-gray-700">
+                  Brand Name
+                </th>
+                <th className="px-6 py-3 text-left text-gray-700">
+                  Category
+                </th>
+                <th className="px-6 py-3 text-left text-gray-700">
+                  UoM
+                </th>
+
+                <th className="px-6 py-3 text-left text-gray-700">
+                  Status
+                </th>
+                <th className="px-6 py-3 text-right text-gray-700">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
+                  <td
+                    colSpan={8}
+                    className="px-6 py-12 text-center text-gray-500"
+                  >
                     No items found
                   </td>
                 </tr>
               ) : (
                 filteredItems.map((item) => (
-                  <tr 
-                    key={item.itemCode} 
+                  <tr
+                    key={item.itemCode}
                     className={`transition-colors ${
-                      item.isActive ? 'hover:bg-gray-50' : 'bg-gray-50 opacity-75'
+                      item.isActive
+                        ? "hover:bg-gray-50"
+                        : "bg-gray-50 opacity-75"
                     }`}
                   >
-                    <td className="px-6 py-4 text-gray-900">{item.itemCode}</td>
-                    <td className="px-6 py-4 text-gray-900">{item.itemName}</td>
-                    <td className="px-6 py-4 text-gray-700">{item.brandName}</td>
-                    <td className="px-6 py-4 text-gray-700">{item.itemCategory}</td>
-                    <td className="px-6 py-4 text-gray-700">{item.uom}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {item.properties.map((prop, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm"
-                          >
-                            {prop.name}: {prop.values.length}
-                          </span>
-                        ))}
-                      </div>
+                    <td className="px-6 py-4 text-gray-900">
+                      {item.itemCode}
                     </td>
+                    <td className="px-6 py-4 text-gray-900">
+                      {item.itemName}
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">
+                      {item.brandName}
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">
+                      {item.itemCategory}
+                    </td>
+                    <td className="px-6 py-4 text-gray-700">
+                      {item.uom}
+                    </td>
+
                     <td className="px-6 py-4">
                       {item.isActive ? (
                         <span className="inline-flex px-3 py-1 rounded-full text-sm bg-green-100 text-green-700">
@@ -227,10 +260,14 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
                         <div className="flex items-center gap-2">
                           <Toggle
                             enabled={item.isActive}
-                            onChange={() => handleToggleActive(item)}
+                            onChange={() =>
+                              handleToggleActive(item)
+                            }
                           />
                           <span className="text-sm text-gray-600">
-                            {item.isActive ? 'Active' : 'Inactive'}
+                            {item.isActive
+                              ? "Active"
+                              : "Inactive"}
                           </span>
                         </div>
                       </div>
@@ -255,14 +292,26 @@ export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: I
       {/* Confirmation Modal */}
       {confirmAction && (
         <ConfirmationModal
-          title={confirmAction.type === 'activate' ? 'Activate Item?' : 'Deactivate Item?'}
+          title={
+            confirmAction.type === "activate"
+              ? "Activate Item?"
+              : "Deactivate Item?"
+          }
           message={
-            confirmAction.type === 'activate'
+            confirmAction.type === "activate"
               ? `Are you sure you want to activate "${confirmAction.item.itemName}"?\n\nThis item will become available in vendor item selection dropdowns.`
               : `Are you sure you want to deactivate "${confirmAction.item.itemName}"?\n\nThis item will no longer appear in vendor item selection dropdowns but can be reactivated anytime.`
           }
-          confirmLabel={confirmAction.type === 'activate' ? 'Activate Item' : 'Deactivate Item'}
-          confirmStyle={confirmAction.type === 'activate' ? 'primary' : 'secondary'}
+          confirmLabel={
+            confirmAction.type === "activate"
+              ? "Activate Item"
+              : "Deactivate Item"
+          }
+          confirmStyle={
+            confirmAction.type === "activate"
+              ? "primary"
+              : "secondary"
+          }
           onConfirm={handleConfirmToggle}
           onCancel={() => setConfirmAction(null)}
         />
