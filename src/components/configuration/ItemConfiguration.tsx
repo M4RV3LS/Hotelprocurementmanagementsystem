@@ -1,15 +1,31 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit2 } from 'lucide-react';
-import { items } from '../../data/mockData';
 import ItemFormModal from './ItemFormModal';
 import ConfirmationModal from './ConfirmationModal';
 import Toast from '../Toast';
 import Toggle from '../Toggle';
 
-export type Item = typeof items[0];
+export type Item = {
+  itemCode: string;
+  itemName: string;
+  brandName: string;
+  itemCategory: string;
+  uom: string;
+  properties: Array<{
+    name: string;
+    values: string[];
+  }>;
+  isActive: boolean;
+};
 
-export default function ItemConfiguration() {
-  const [itemsList, setItemsList] = useState(items);
+interface ItemConfigurationProps {
+  items: Item[];
+  onSaveItem: (item: Item) => Promise<Item>;
+  onDeleteItem: (itemCode: string) => Promise<void>;
+}
+
+export default function ItemConfiguration({ items, onSaveItem, onDeleteItem }: ItemConfigurationProps) {
+  const [itemsList, setItemsList] = useState<Item[]>(items);
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
@@ -18,6 +34,11 @@ export default function ItemConfiguration() {
   } | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+
+  // Sync with props when they change
+  useEffect(() => {
+    setItemsList(items);
+  }, [items]);
 
   // Filter items based on status
   const filteredItems = useMemo(() => {
@@ -43,42 +64,69 @@ export default function ItemConfiguration() {
     });
   };
 
-  const handleConfirmToggle = () => {
+  const handleConfirmToggle = async () => {
     if (!confirmAction) return;
 
     const { type, item } = confirmAction;
-    setItemsList((prev) =>
-      prev.map((i) =>
-        i.itemCode === item.itemCode ? { ...i, isActive: !i.isActive } : i
-      )
-    );
+    
+    try {
+      // Update the item's active status
+      const updatedItem = { ...item, isActive: !item.isActive };
+      await onSaveItem(updatedItem);
+      
+      // Update local state
+      setItemsList((prev) =>
+        prev.map((i) =>
+          i.itemCode === item.itemCode ? updatedItem : i
+        )
+      );
 
-    setToast({
-      message: `Item ${type === 'activate' ? 'activated' : 'deactivated'} successfully`,
-      type: 'success'
-    });
+      setToast({
+        message: `Item ${type === 'activate' ? 'activated' : 'deactivated'} successfully`,
+        type: 'success'
+      });
 
-    setTimeout(() => setToast(null), 5000);
+      setTimeout(() => setToast(null), 5000);
+    } catch (error) {
+      console.error('Error toggling item status:', error);
+      setToast({
+        message: `Failed to ${type} item`,
+        type: 'error'
+      });
+      setTimeout(() => setToast(null), 5000);
+    }
+    
     setConfirmAction(null);
   };
 
-  const handleSaveItem = (item: Item) => {
-    if (editingItem) {
-      // Update existing
-      setItemsList((prev) =>
-        prev.map((i) => (i.itemCode === editingItem.itemCode ? item : i))
-      );
-    } else {
-      // Add new
-      setItemsList((prev) => [...prev, item]);
+  const handleSaveItem = async (item: Item) => {
+    try {
+      await onSaveItem(item);
+      
+      if (editingItem) {
+        // Update existing
+        setItemsList((prev) =>
+          prev.map((i) => (i.itemCode === editingItem.itemCode ? item : i))
+        );
+      } else {
+        // Add new
+        setItemsList((prev) => [...prev, item]);
+      }
+      setShowModal(false);
+      
+      setToast({
+        message: `Item ${editingItem ? 'updated' : 'created'} successfully`,
+        type: 'success'
+      });
+      setTimeout(() => setToast(null), 5000);
+    } catch (error) {
+      console.error('Error saving item:', error);
+      setToast({
+        message: `Failed to ${editingItem ? 'update' : 'create'} item`,
+        type: 'error'
+      });
+      setTimeout(() => setToast(null), 5000);
     }
-    setShowModal(false);
-    
-    setToast({
-      message: `Item ${editingItem ? 'updated' : 'created'} successfully`,
-      type: 'success'
-    });
-    setTimeout(() => setToast(null), 5000);
   };
 
   return (
