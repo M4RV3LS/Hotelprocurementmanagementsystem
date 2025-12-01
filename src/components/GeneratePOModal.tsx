@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { X, ChevronRight, Download } from "lucide-react";
 import {
-  vendors,
-  procurementRequests,
   type ProcurementRequest,
   type ProcurementItem,
 } from "../data/mockData";
@@ -10,6 +8,8 @@ import {
 interface GeneratePOModalProps {
   onClose: () => void;
   onGenerate: (poRequests: ProcurementRequest[]) => void;
+  vendors: any[]; // Add this
+  requests: ProcurementRequest[]; // Add this
 }
 
 interface POData {
@@ -40,6 +40,8 @@ type StepType = "selection" | "preview";
 export default function GeneratePOModal({
   onClose,
   onGenerate,
+  vendors,
+  requests,
 }: GeneratePOModalProps) {
   const [step, setStep] = useState<StepType>("selection");
 
@@ -59,8 +61,7 @@ export default function GeneratePOModal({
       request: ProcurementRequest;
       item: ProcurementItem;
     }> = [];
-
-    procurementRequests.forEach((request) => {
+    requests.forEach((request) => {
       if (request.status === "Waiting PO") {
         request.items.forEach((item) => {
           if (

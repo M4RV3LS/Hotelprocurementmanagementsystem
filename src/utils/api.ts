@@ -14,11 +14,10 @@ const supabase = createClient(supabaseUrl, publicAnonKey);
 // HELPERS: Data Mapping (DB <-> Frontend)
 // ========================================
 
-// 1. Helper to determine region (Fix for Requirement #4)
+// 1. Helper to determine region
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
 
-  // Fallback logic if region is empty in DB
   const address = (row.property_address || "").toLowerCase();
   if (address.includes("jakarta")) return "DKI Jakarta";
   if (address.includes("bali")) return "Bali";
@@ -27,7 +26,7 @@ const determineRegion = (row: any): string => {
   if (address.includes("yogya"))
     return "Daerah Istimewa Yogyakarta";
   if (address.includes("medan")) return "Sumatera Utara";
-  return "DKI Jakarta"; // Default fallback
+  return "DKI Jakarta";
 };
 
 // 2. Updated Mapper
@@ -53,21 +52,20 @@ const mapDBRequestToFrontend = (
       id: item.id,
       prNumber: row.pr_number,
       itemCode: item.master_items?.code || "UNKNOWN",
-      // Fix: Use raw name, don't append properties
       itemName:
         item.master_items?.name || item.item_name_snapshot,
       itemCategory: item.master_items?.category || "Ops Item",
-      selectedProperties: {}, // CLEARED (Requirement #1)
+      selectedProperties: {},
       quantity: item.quantity,
       uom: item.uom,
-      region: region, // Fix: Use derived region
+      region: region,
       itemStatus: item.item_status || "Not Set",
       status: item.status,
       vendorName: item.vendors?.name,
       vendorCode: item.vendors?.code,
       paymentTerms: item.payment_terms,
       unitPrice: item.unit_price,
-      taxPercentage: item.tax_percentage || 11, // Ensure tax exists
+      taxPercentage: item.tax_percentage || 11,
       totalPrice: item.total_price,
       poNumber: item.po_number,
       poDate: item.po_date,
@@ -112,11 +110,10 @@ export const procurementRequestsAPI = {
   save: async (
     request: ProcurementRequest,
   ): Promise<ProcurementRequest> => {
-    // 1. Upsert Header
-    // Derive region from the first item if available, or default
     const derivedRegion =
       request.items[0]?.region || "DKI Jakarta";
 
+    // 1. Upsert Header
     const { data: prData, error: prError } = await supabase
       .from("procurement_requests")
       .upsert(
@@ -126,7 +123,7 @@ export const procurementRequestsAPI = {
           property_name: request.propertyName,
           property_code: request.propertyCode,
           property_address: request.propertyAddress,
-          region: derivedRegion, // Save Region
+          region: derivedRegion,
           requestor_name: request.requestorName,
           requestor_email: request.requestorEmail,
           pic_name: request.picName,
@@ -139,10 +136,9 @@ export const procurementRequestsAPI = {
       .single();
 
     if (prError) throw prError;
-
-    // 2. Upsert Items
     const prId = prData.id;
 
+    // 2. Upsert Items
     const itemsToUpsert = request.items.map((item) => ({
       request_id: prId,
       id:
@@ -160,7 +156,7 @@ export const procurementRequestsAPI = {
       po_date: item.poDate ? new Date(item.poDate) : null,
       estimated_delivery_start: item.estimatedDeliveryStart,
       estimated_delivery_end: item.estimatedDeliveryEnd,
-      // Note: assigned_vendor_id updating requires fetching vendor UUID first in a real scenario
+      // Note: For updates, we keep existing relations if not passed
     }));
 
     if (itemsToUpsert.length > 0) {
@@ -217,47 +213,117 @@ export const vendorsAPI = {
       vendorAddress: v.address,
       vendorEmail: v.email,
       vendorPhone: v.phone,
-      // Mapped for PO Modal (Requirement #2c)
       contact_person: v.contact_person,
-      // Fallback for UI if it expects picName
       picName: v.contact_person,
       ppnPercentage: v.ppn_percentage,
+      serviceChargePercentage: v.service_charge_percentage,
+      // pb1Percentage: v.pb1_percentage, // Uncomment if column exists
       paymentMethods: v.payment_methods,
       isActive: v.is_active,
+      vendorAgreementLink: v.agreement_link,
+      agreements: [], // Needs separate table to persist properly
       items: v.items.map((vi: any) => ({
         itemCode: vi.master_item?.code,
         itemName: vi.master_item?.name,
         priceType: vi.price_type,
         unitPrice: vi.unit_price,
         minQuantity: vi.min_quantity,
+        agreementNumber: vi.agreement_number,
         taxPercentage: 11,
       })),
     }));
   },
 
+  // FIXED: Now saves Vendor AND Vendor Catalog Items
   save: async (vendor: any): Promise<any> => {
-    const { data, error } = await supabase
-      .from("vendors")
-      .upsert(
-        {
-          code: vendor.vendorCode,
-          name: vendor.vendorName,
-          region: vendor.vendorRegion,
-          address: vendor.vendorAddress,
-          email: vendor.vendorEmail,
-          phone: vendor.vendorPhone,
-          contact_person:
-            vendor.picName || vendor.contact_person, // Save PIC
-          payment_methods: vendor.paymentMethods,
-          ppn_percentage: vendor.ppnPercentage,
-          is_active: vendor.isActive,
-        },
-        { onConflict: "code" },
-      )
-      .select()
-      .single();
+    // 1. Save Vendor Header
+    const { data: vendorData, error: vendorError } =
+      await supabase
+        .from("vendors")
+        .upsert(
+          {
+            code: vendor.vendorCode,
+            name: vendor.vendorName,
+            region: vendor.vendorRegion,
+            address: vendor.vendorAddress,
+            email: vendor.vendorEmail,
+            phone: vendor.vendorPhone,
+            contact_person:
+              vendor.picName || vendor.contact_person,
+            payment_methods: vendor.paymentMethods,
+            ppn_percentage: vendor.ppnPercentage,
+            service_charge_percentage:
+              vendor.serviceChargePercentage,
+            is_active: vendor.isActive,
+            agreement_link: vendor.vendorAgreementLink,
+          },
+          { onConflict: "code" },
+        )
+        .select("id")
+        .single();
 
-    if (error) throw error;
+    if (vendorError) throw vendorError;
+
+    const vendorId = vendorData.id;
+
+    // 2. Save Vendor Catalog Items (The mapping configuration)
+    if (vendor.items && vendor.items.length > 0) {
+      // A. Get UUIDs for the items based on their codes
+      const itemCodes = vendor.items.map(
+        (i: any) => i.itemCode,
+      );
+      const { data: masterItems, error: masterError } =
+        await supabase
+          .from("master_items")
+          .select("code, id")
+          .in("code", itemCodes);
+
+      if (masterError) throw masterError;
+
+      const itemMap = new Map(
+        masterItems?.map((i) => [i.code, i.id]),
+      );
+
+      // B. Prepare Data
+      const catalogItems = vendor.items
+        .map((vItem: any) => {
+          const itemId = itemMap.get(vItem.itemCode);
+          if (!itemId) return null;
+
+          return {
+            vendor_id: vendorId,
+            item_id: itemId,
+            price_type: vItem.priceType,
+            unit_price: vItem.unitPrice,
+            min_quantity: vItem.minQuantity,
+            agreement_number: vItem.agreementNumber,
+          };
+        })
+        .filter((i: any) => i !== null);
+
+      // C. Sync: Delete old mappings for this vendor and insert new ones
+      const { error: deleteError } = await supabase
+        .from("vendor_catalog_items")
+        .delete()
+        .eq("vendor_id", vendorId);
+
+      if (deleteError) throw deleteError;
+
+      if (catalogItems.length > 0) {
+        const { error: insertError } = await supabase
+          .from("vendor_catalog_items")
+          .insert(catalogItems);
+
+        if (insertError) throw insertError;
+      }
+    } else {
+      // If items list is empty, clear the catalog
+      await supabase
+        .from("vendor_catalog_items")
+        .delete()
+        .eq("vendor_id", vendorId);
+    }
+
     return vendor;
   },
 
@@ -279,7 +345,6 @@ export const itemsAPI = {
     const { data, error } = await supabase
       .from("master_items")
       .select("*");
-
     if (error) throw error;
 
     return data.map((i) => ({
@@ -288,7 +353,7 @@ export const itemsAPI = {
       brandName: i.brand_name,
       itemCategory: i.category,
       uom: i.uom,
-      properties: [], // CLEARED (Requirement #1)
+      properties: [],
       isActive: i.is_active,
     }));
   },
@@ -303,7 +368,6 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           uom: item.uom,
-          // properties: Removed (Requirement #1)
           is_active: item.isActive,
         },
         { onConflict: "code" },
@@ -336,9 +400,6 @@ export const paymentMethodsAPI = {
       .order("name");
 
     if (error) {
-      console.warn(
-        "Payment methods table might not exist, returning empty",
-      );
       return [];
     }
 
@@ -404,7 +465,6 @@ export const initializeDatabase = async (data: {
             brand_name: item.brandName,
             category: item.itemCategory,
             uom: item.uom,
-            // properties: Removed (Requirement #1)
             is_active: item.isActive,
           })),
           { onConflict: "code" },
@@ -479,7 +539,6 @@ export const initializeDatabase = async (data: {
 
     if (data.requests?.length) {
       for (const req of data.requests) {
-        // DERIVE REGION (Fix for Requirement #4)
         const derivedRegion =
           req.items?.[0]?.region || "DKI Jakarta";
 
@@ -493,7 +552,7 @@ export const initializeDatabase = async (data: {
               property_name: req.propertyName,
               property_code: req.propertyCode,
               property_address: req.propertyAddress,
-              region: derivedRegion, // Save to DB
+              region: derivedRegion,
               requestor_name: req.requestorName,
               requestor_email: req.requestorEmail,
               pic_name: req.picName,
@@ -506,7 +565,6 @@ export const initializeDatabase = async (data: {
           .single();
 
         if (prError) continue;
-
         const prId = prData.id;
 
         // B. Insert Line Items
@@ -545,7 +603,6 @@ export const initializeDatabase = async (data: {
             .from("request_items")
             .delete()
             .eq("request_id", prId);
-
           await supabase
             .from("request_items")
             .insert(itemsToInsert);
@@ -565,7 +622,6 @@ export const initializeDatabase = async (data: {
             .from("activity_logs")
             .delete()
             .eq("request_id", prId);
-
           await supabase
             .from("activity_logs")
             .insert(logsToInsert);

@@ -3,7 +3,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Plus, ChevronDown, Search } from "lucide-react";
 import {
-  procurementRequests as initialRequests,
   type ProcurementRequest,
   type ProcurementStatus,
   type ProcurementItem,
@@ -40,11 +39,13 @@ interface TableRow {
 
 interface ProcurementDashboardProps {
   requests?: ProcurementRequest[];
+  vendors?: any[]; // Add this
   onRequestsUpdate?: (requests: ProcurementRequest[]) => void;
 }
 
 export default function ProcurementDashboard({
   requests: externalRequests,
+  vendors: externalVendors = [], // Default to empty array
   onRequestsUpdate,
 }: ProcurementDashboardProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -60,7 +61,7 @@ export default function ProcurementDashboard({
     useState(false);
 
   const [requests, setRequests] = useState(
-    externalRequests || initialRequests,
+    externalRequests || [],
   );
 
   const [toast, setToast] = useState<{
@@ -434,6 +435,7 @@ export default function ProcurementDashboard({
       {selectedRequest && (
         <RequestDetailModal
           request={selectedRequest}
+          vendors={externalVendors} // PASS IT HERE
           onClose={() => setSelectedRequest(null)}
           onUpdate={handleUpdateRequest}
         />
@@ -453,6 +455,8 @@ export default function ProcurementDashboard({
             setShowGeneratePOModal(false);
             setSelectedPRNumberForPO(null);
           }}
+          vendors={externalVendors} // PASS IT HERE
+          requests={requests} // Pass full requests for item scanning
           onGenerate={(updatedRequests) => {
             const updatedMap = new Map(
               updatedRequests.map((r) => [r.prNumber, r]),

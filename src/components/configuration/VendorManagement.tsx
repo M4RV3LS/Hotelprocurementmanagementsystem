@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Plus, Edit2, Package } from "lucide-react";
 import { vendors } from "../../data/mockData";
 import VendorFormModal from "./VendorFormModalUpdated";
@@ -9,6 +9,12 @@ import type { PaymentMethod } from "./PaymentMethodConfiguration";
 
 export type Vendor = (typeof vendors)[0];
 
+interface VendorManagementProps {
+  vendors: any[];
+  items: any[];
+  onSaveVendor: (vendor: any) => Promise<any>;
+  onDeleteVendor: (vendorCode: string) => Promise<void>;
+}
 // Mock active payment methods - in real app, this would come from context or props
 const mockActivePaymentMethods = [
   "Cash Before Delivery",
@@ -19,7 +25,12 @@ const mockActivePaymentMethods = [
   "Cash on Delivery (COD)",
 ];
 
-export default function VendorManagement() {
+export default function VendorManagement({
+  vendors,
+  items,
+  onSaveVendor,
+  onDeleteVendor,
+}: VendorManagementProps) {
   const [vendorsList, setVendorsList] = useState(vendors);
   const [showModal, setShowModal] = useState(false);
   const [editingVendor, setEditingVendor] =
@@ -35,6 +46,10 @@ export default function VendorManagement() {
   const [filterStatus, setFilterStatus] = useState<
     "all" | "active" | "inactive"
   >("all");
+
+  useEffect(() => {
+    setVendorsList(vendors);
+  }, [vendors]);
 
   // Filter vendors based on status
   const filteredVendors = useMemo(() => {
@@ -82,27 +97,24 @@ export default function VendorManagement() {
     setConfirmAction(null);
   };
 
-  const handleSaveVendor = (vendor: Vendor) => {
-    if (editingVendor) {
-      // Update existing
-      setVendorsList((prev) =>
-        prev.map((v) =>
-          v.vendorCode === editingVendor.vendorCode
-            ? vendor
-            : v,
-        ),
-      );
-    } else {
-      // Add new
-      setVendorsList((prev) => [...prev, vendor]);
+  const handleSaveVendor = async (vendor: any) => {
+    try {
+      await onSaveVendor(vendor); // Call API
+      // Local state update is handled by the useEffect above when parent refreshes,
+      // but we can optimistically update here if needed, or just close modal.
+      setShowModal(false);
+      setToast({
+        message: "Vendor saved successfully",
+        type: "success",
+      });
+      setTimeout(() => setToast(null), 5000);
+    } catch (error) {
+      console.error(error);
+      setToast({
+        message: "Failed to save vendor",
+        type: "error",
+      });
     }
-    setShowModal(false);
-
-    setToast({
-      message: `Vendor ${editingVendor ? "updated" : "created"} successfully`,
-      type: "success",
-    });
-    setTimeout(() => setToast(null), 5000);
   };
 
   return (
@@ -238,6 +250,7 @@ export default function VendorManagement() {
           onClose={() => setShowModal(false)}
           onSave={handleSaveVendor}
           activePaymentMethods={mockActivePaymentMethods}
+          items={items} // PASS THE ITEMS HERE
         />
       )}
 

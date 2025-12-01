@@ -9,7 +9,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  procurementRequests,
   type ProcurementRequest,
   type ActivityLog,
 } from "../data/mockData";
@@ -35,9 +34,8 @@ export default function ListPO({
     prNumbers: string[];
     affectedRequests: ProcurementRequest[];
   } | null>(null);
-  const [localRequests, setLocalRequests] = useState(
-    externalRequests || procurementRequests,
-  );
+  const [localRequests, setLocalRequests] =
+    useState(externalRequests);
 
   useEffect(() => {
     if (externalRequests) {

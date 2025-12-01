@@ -11,12 +11,14 @@ import LogActivity from "./request-detail/LogActivity";
 
 interface RequestDetailModalProps {
   request: ProcurementRequest;
+  vendors: any[];
   onClose: () => void;
   onUpdate: (request: ProcurementRequest) => void;
 }
 
 export default function RequestDetailModal({
   request,
+  vendors,
   onClose,
   onUpdate,
 }: RequestDetailModalProps) {
@@ -238,7 +240,8 @@ export default function RequestDetailModal({
 
                 <ItemDetailSection
                   item={item}
-                  requestStatus={item.status} // Pass item status as context
+                  vendors={vendors} // PASS IT HERE
+                  requestStatus={item.status}
                   onUpdate={(updatedItem) =>
                     handleItemUpdate(item.id, updatedItem)
                   }

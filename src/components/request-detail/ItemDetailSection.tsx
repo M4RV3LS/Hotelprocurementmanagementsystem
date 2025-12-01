@@ -4,17 +4,18 @@ import type {
   ProcurementItem,
   PaymentTerms,
 } from "../../data/mockData";
-import { vendors } from "../../data/mockData";
 
 interface ItemDetailSectionProps {
   item: ProcurementItem;
   requestStatus: string;
+  vendors: any[]; // Add this
   onUpdate: (updatedItem: Partial<ProcurementItem>) => void;
 }
 
 export default function ItemDetailSection({
   item,
   requestStatus,
+  vendors,
   onUpdate,
 }: ItemDetailSectionProps) {
   const [selectedVendor, setSelectedVendor] = useState(

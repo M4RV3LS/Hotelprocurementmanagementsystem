@@ -1,9 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Search, Download, Eye } from "lucide-react";
-import {
-  procurementRequests as initialRequests, // Rename to initialRequests for clarity
-  type ProcurementRequest,
-} from "../data/mockData";
+import { type ProcurementRequest } from "../data/mockData";
 import RequestDetailModal from "./RequestDetailModal";
 
 // Interface for props to receive DB data and update functions
@@ -13,7 +10,7 @@ interface ListPRProps {
 }
 
 export default function ListPR({
-  requests: externalRequests,
+  requests: externalRequests = [],
   onRequestsUpdate,
 }: ListPRProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -24,9 +21,7 @@ export default function ListPR({
     useState<ProcurementRequest | null>(null);
 
   // Initialize with props (DB data) or fallback to mock
-  const [requests, setRequests] = useState(
-    externalRequests || initialRequests,
-  );
+  const [requests, setRequests] = useState(externalRequests);
 
   // 1. SYNC: Update local state when parent data (DB) changes
   useEffect(() => {

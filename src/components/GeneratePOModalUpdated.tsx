@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { X, ChevronRight, Download } from "lucide-react";
 import {
-  vendors,
-  procurementRequests,
   type ProcurementRequest,
   type ProcurementItem,
 } from "../data/mockData";
@@ -11,6 +9,8 @@ import MultiSelectDropdown from "./configuration/MultiSelectDropdown";
 interface GeneratePOModalProps {
   onClose: () => void;
   onGenerate: (poRequests: ProcurementRequest[]) => void;
+  vendors: any[];
+  requests: ProcurementRequest[];
 }
 
 interface POData {
@@ -48,6 +48,8 @@ type StepType = "selection" | "preview";
 export default function GeneratePOModal({
   onClose,
   onGenerate,
+  vendors,
+  requests,
 }: GeneratePOModalProps) {
   const [step, setStep] = useState<StepType>("selection");
 
@@ -70,7 +72,7 @@ export default function GeneratePOModal({
       item: ProcurementItem;
     }> = [];
 
-    procurementRequests.forEach((request) => {
+    requests.forEach((request) => {
       request.items.forEach((item) => {
         if (
           item.status === "Waiting PO" &&
@@ -218,7 +220,7 @@ export default function GeneratePOModal({
   const handleExportPO = () => {
     if (!poData) return;
 
-    const updatedRequests = procurementRequests.map(
+    const updatedRequests = requests.map(
       (request) => {
         const matchingPOItems = poData.items.filter(
           (poItem) => poItem.prNumber === request.prNumber,
