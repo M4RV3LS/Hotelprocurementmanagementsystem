@@ -1,11 +1,7 @@
-//ProcurementDashboard.tsx
-import { useState, useMemo } from "react";
-import {
-  Plus,
-  Filter,
-  ChevronDown,
-  Search,
-} from "lucide-react";
+// src/components/ProcurementDashboard.tsx
+
+import { useState, useMemo, useEffect } from "react";
+import { Plus, ChevronDown, Search } from "lucide-react";
 import {
   procurementRequests as initialRequests,
   type ProcurementRequest,
@@ -19,7 +15,6 @@ import InputETAForm from "./forms/InputETAForm";
 import ActionButtons from "./ActionButtons";
 import Toast from "./Toast";
 
-// Status options - REMOVED "Waiting PR"
 const statuses: Array<ProcurementStatus | "All"> = [
   "All",
   "Review by Procurement",
@@ -28,7 +23,6 @@ const statuses: Array<ProcurementStatus | "All"> = [
   "Delivered",
 ];
 
-// Table row type - represents one item row (multiple items per PR)
 interface TableRow {
   prNumber: string;
   propertyName: string;
@@ -41,7 +35,7 @@ interface TableRow {
   requestDate: string;
   request: ProcurementRequest;
   item: ProcurementItem;
-  isFirstItemOfPR: boolean; // For visual grouping
+  isFirstItemOfPR: boolean;
 }
 
 interface ProcurementDashboardProps {
@@ -64,9 +58,11 @@ export default function ProcurementDashboard({
     useState<ProcurementRequest | null>(null);
   const [showStatusFilter, setShowStatusFilter] =
     useState(false);
+
   const [requests, setRequests] = useState(
     externalRequests || initialRequests,
   );
+
   const [toast, setToast] = useState<{
     message: string;
     type: "success" | "error";
@@ -82,23 +78,13 @@ export default function ProcurementDashboard({
   const [selectedPRNumberForETA, setSelectedPRNumberForETA] =
     useState<string | null>(null);
 
-  // Sync with external requests when they change
-  useState(() => {
+  useEffect(() => {
     if (externalRequests) {
       setRequests(externalRequests);
     }
-  });
+  }, [externalRequests]);
 
-  // Update internal state when external requests change
-  if (
-    externalRequests &&
-    JSON.stringify(externalRequests) !==
-      JSON.stringify(requests)
-  ) {
-    setRequests(externalRequests);
-  }
-
-  // Convert requests to table rows (one row per item)
+  // Convert requests to table rows based on ITEMS
   const tableRows = useMemo(() => {
     const rows: TableRow[] = [];
 
@@ -118,7 +104,7 @@ export default function ProcurementDashboard({
           prNumber: request.prNumber,
           propertyName: request.propertyName,
           propertyCode: request.propertyCode,
-          status: request.status,
+          status: item.status, // ALWAYS use item status
           itemName: itemDisplay,
           itemProperties: properties,
           quantity: item.quantity,
@@ -134,11 +120,9 @@ export default function ProcurementDashboard({
     return rows;
   }, [requests]);
 
-  // Filter and sort data
   const filteredData = useMemo(() => {
     let filtered = [...tableRows];
 
-    // Apply search
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -151,14 +135,12 @@ export default function ProcurementDashboard({
       );
     }
 
-    // Apply status filter
     if (selectedStatuses.length > 0) {
       filtered = filtered.filter((row) =>
         selectedStatuses.includes(row.status),
       );
     }
 
-    // Apply sort
     filtered.sort((a, b) => {
       const dateA = new Date(a.requestDate).getTime();
       const dateB = new Date(b.requestDate).getTime();
@@ -178,6 +160,15 @@ export default function ProcurementDashboard({
     );
   };
 
+  const propagateUpdates = (
+    updatedRequests: ProcurementRequest[],
+  ) => {
+    setRequests(updatedRequests);
+    if (onRequestsUpdate) {
+      onRequestsUpdate(updatedRequests);
+    }
+  };
+
   const handleUpdateRequest = (
     updatedRequest: ProcurementRequest,
   ) => {
@@ -187,25 +178,16 @@ export default function ProcurementDashboard({
         : req,
     );
 
-    setRequests(updatedRequests);
+    propagateUpdates(updatedRequests);
     setSelectedRequest(updatedRequest);
 
-    // Notify parent component if callback provided
-    if (onRequestsUpdate) {
-      onRequestsUpdate(updatedRequests);
-    }
-
-    // Show toast notification
     setToast({
-      message: `Status updated to ${updatedRequest.status}`,
+      message: `Request updated successfully`,
       type: "success",
     });
 
-    // Highlight the updated rows
     setHighlightedPRNumber(updatedRequest.prNumber);
     setTimeout(() => setHighlightedPRNumber(null), 2000);
-
-    // Auto-dismiss toast after 5 seconds
     setTimeout(() => setToast(null), 5000);
   };
 
@@ -217,7 +199,6 @@ export default function ProcurementDashboard({
     });
   };
 
-  // Group consecutive rows by PR number for visual styling
   const getRowGroupClass = (row: TableRow, index: number) => {
     const prevRow = index > 0 ? filteredData[index - 1] : null;
     const nextRow =
@@ -230,7 +211,6 @@ export default function ProcurementDashboard({
     const samePRAsNext =
       nextRow && nextRow.prNumber === row.prNumber;
 
-    // Highlight state
     const isHighlighted = highlightedPRNumber === row.prNumber;
 
     let baseClass = "transition-all duration-500";
@@ -241,7 +221,6 @@ export default function ProcurementDashboard({
       baseClass += " hover:bg-gray-50";
     }
 
-    // Add subtle background and left border for grouped rows
     if (samePRAsPrev || samePRAsNext) {
       baseClass +=
         " bg-red-50/20 border-l-4 border-l-[#ec2224]";
@@ -260,37 +239,14 @@ export default function ProcurementDashboard({
     setShowInputETAModal(true);
   };
 
-  const handleRequestsUpdate = (
-    updatedRequests: ProcurementRequest[],
-  ) => {
-    setRequests(updatedRequests);
-
-    // Notify parent component if callback provided
-    if (onRequestsUpdate) {
-      onRequestsUpdate(updatedRequests);
-    }
-
-    // Show notification
-    setToast({
-      message: "Requests updated successfully",
-      type: "success",
-    });
-
-    setTimeout(() => setToast(null), 5000);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-gray-900 mb-6">
           Procurement Dashboard
         </h1>
-
-        {/* Filter Controls */}
         <div className="flex gap-4 items-center flex-wrap justify-between">
           <div className="flex gap-4 items-center flex-wrap">
-            {/* Status Filter */}
             <div className="relative">
               <button
                 onClick={() =>
@@ -341,7 +297,6 @@ export default function ProcurementDashboard({
               )}
             </div>
 
-            {/* Search Bar */}
             <div className="flex-1 min-w-[300px] relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
               <input
@@ -361,7 +316,6 @@ export default function ProcurementDashboard({
               )}
             </div>
 
-            {/* Sort Dropdown */}
             <select
               value={sortOrder}
               onChange={(e) =>
@@ -376,7 +330,6 @@ export default function ProcurementDashboard({
             </select>
           </div>
 
-          {/* Generate PO Button */}
           <button
             onClick={() => setShowGeneratePOModal(true)}
             className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors flex items-center gap-2"
@@ -387,7 +340,6 @@ export default function ProcurementDashboard({
         </div>
       </div>
 
-      {/* Data Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -452,7 +404,9 @@ export default function ProcurementDashboard({
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <StatusBadge status={row.status} />
+                        <StatusBadge
+                          status={row.status as any}
+                        />
                       </td>
                       <td className="px-6 py-4 text-gray-700">
                         {row.itemName}
@@ -471,9 +425,6 @@ export default function ProcurementDashboard({
                           onViewRequest={() =>
                             setSelectedRequest(row.request)
                           }
-                          onGeneratePO={() =>
-                            handleGeneratePO(row.prNumber)
-                          }
                           onInputETA={() =>
                             handleInputETA(row.prNumber)
                           }
@@ -488,7 +439,6 @@ export default function ProcurementDashboard({
         </div>
       </div>
 
-      {/* Request Detail Modal */}
       {selectedRequest && (
         <RequestDetailModal
           request={selectedRequest}
@@ -497,7 +447,6 @@ export default function ProcurementDashboard({
         />
       )}
 
-      {/* Toast Notification */}
       {toast && (
         <Toast
           message={toast.message}
@@ -506,7 +455,6 @@ export default function ProcurementDashboard({
         />
       )}
 
-      {/* Generate PO Modal */}
       {showGeneratePOModal && (
         <GeneratePOModal
           onClose={() => {
@@ -514,15 +462,15 @@ export default function ProcurementDashboard({
             setSelectedPRNumberForPO(null);
           }}
           onGenerate={(updatedRequests) => {
-            // Update the requests state
-            setRequests((prev) => {
-              const updatedMap = new Map(
-                updatedRequests.map((r) => [r.prNumber, r]),
-              );
-              return prev.map(
-                (req) => updatedMap.get(req.prNumber) || req,
-              );
-            });
+            const updatedMap = new Map(
+              updatedRequests.map((r) => [r.prNumber, r]),
+            );
+            const newRequests = requests.map(
+              (req) => updatedMap.get(req.prNumber) || req,
+            );
+
+            propagateUpdates(newRequests);
+
             setShowGeneratePOModal(false);
             setToast({
               message: "PO generated successfully!",
@@ -533,7 +481,6 @@ export default function ProcurementDashboard({
         />
       )}
 
-      {/* Input ETA Modal */}
       {showInputETAModal && selectedPRNumberForETA && (
         <InputETAForm
           request={
@@ -545,20 +492,39 @@ export default function ProcurementDashboard({
             setShowInputETAModal(false);
             setSelectedPRNumberForETA(null);
           }}
-          onSubmit={(startDate, endDate) => {
-            // Update the request with ETA
-            setRequests((prev) =>
-              prev.map((req) =>
-                req.prNumber === selectedPRNumberForETA
-                  ? {
-                      ...req,
-                      status: "On Process by Vendor" as const,
-                      estimatedDeliveryStart: startDate,
-                      estimatedDeliveryEnd: endDate,
-                    }
-                  : req,
-              ),
+          onSubmit={(updatedRequest) => {
+            // For ETA form, we might need to update specific items status too
+            // But typically ETA applies to the whole "delivery" (shipment)
+            // We'll update the items that have the relevant status
+            const processedItems = updatedRequest.items.map(
+              (item) => {
+                if (
+                  item.status === "Waiting PO" ||
+                  item.poNumber
+                ) {
+                  // Assuming we are updating items in transit
+                  return {
+                    ...item,
+                    status: "On Process by Vendor" as const,
+                  };
+                }
+                return item;
+              },
             );
+
+            const finalRequest = {
+              ...updatedRequest,
+              items: processedItems,
+            };
+
+            const newRequests = requests.map((req) =>
+              req.prNumber === selectedPRNumberForETA
+                ? finalRequest
+                : req,
+            );
+
+            propagateUpdates(newRequests);
+
             setShowInputETAModal(false);
             setSelectedPRNumberForETA(null);
             setToast({

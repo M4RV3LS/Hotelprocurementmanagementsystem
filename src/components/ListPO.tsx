@@ -1,4 +1,4 @@
-// ListPO.tsx
+// src/components/ListPO.tsx
 
 import { useState, useMemo, useEffect } from "react";
 import {
@@ -39,47 +39,72 @@ export default function ListPO({
     externalRequests || procurementRequests,
   );
 
-  // Sync with external requests when they change
   useEffect(() => {
     if (externalRequests) {
       setLocalRequests(externalRequests);
     }
   }, [externalRequests]);
 
-  // Get only requests with PO numbers (grouped by PO)
+  // GROUP BY PO NUMBER (Scanning Items)
   const purchaseOrders = useMemo(() => {
-    // Group requests by PO number
-    const poMap = new Map<string, ProcurementRequest[]>();
+    const poMap = new Map<
+      string,
+      {
+        poNumber: string;
+        poDate?: string;
+        vendorName?: string;
+        paymentTerms?: string;
+        status: string; // Derived status for the PO group
+        items: any[]; // Flattened list of items in this PO
+        prNumbers: Set<string>;
+        totalAmount: number;
+      }
+    >();
 
     localRequests.forEach((req) => {
-      if (req.poNumber) {
-        if (!poMap.has(req.poNumber)) {
-          poMap.set(req.poNumber, []);
+      req.items.forEach((item) => {
+        // STRICT FILTER: Only include items that have a PO Number AND are NOT in "Waiting PO" status
+        if (
+          item.poNumber &&
+          item.status !== "Waiting PO" &&
+          item.status !== "Review by Procurement"
+        ) {
+          if (!poMap.has(item.poNumber)) {
+            poMap.set(item.poNumber, {
+              poNumber: item.poNumber,
+              poDate: item.poDate,
+              vendorName: item.vendorName,
+              paymentTerms: item.paymentTerms,
+              status: item.status, // Initial status from first item found
+              items: [],
+              prNumbers: new Set(),
+              totalAmount: 0,
+            });
+          }
+
+          const poGroup = poMap.get(item.poNumber)!;
+          poGroup.items.push(item);
+          poGroup.prNumbers.add(req.prNumber);
+          poGroup.totalAmount += item.totalPrice || 0;
+
+          // Logic to determine "Overall PO Status"
+          // If any item is 'Delivered', and others are 'On Process', what is the PO status?
+          // Usually PO status reflects the lowest common denominator or specific logic.
+          // Here we simply take the status of the items (assuming they move together or using the last one).
+          poGroup.status = item.status;
         }
-        poMap.get(req.poNumber)!.push(req);
-      }
+      });
     });
 
-    // Convert to array of unique POs with their requests
-    return Array.from(poMap.entries()).map(
-      ([poNumber, requests]) => ({
-        poNumber,
-        requests,
-        // Use first request for common PO data
-        poDate: requests[0].poDate,
-        vendorName: requests[0].vendorName,
-        paymentTerms: requests[0].paymentTerms,
-        status: requests[0].status,
-      }),
-    );
+    return Array.from(poMap.values());
   }, [localRequests]);
 
-  // Get unique vendor list
+  // Get unique vendor list from the generated POs
   const vendors = useMemo(() => {
     const uniqueVendors = new Set(
       purchaseOrders.map((po) => po.vendorName).filter(Boolean),
     );
-    return Array.from(uniqueVendors).sort();
+    return Array.from(uniqueVendors).sort() as string[];
   }, [purchaseOrders]);
 
   // Filter and sort PO list
@@ -91,9 +116,9 @@ export default function ListPO({
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (po) =>
-          po.poNumber?.toLowerCase().includes(query) ||
-          po.requests.some((r) =>
-            r.prNumber.toLowerCase().includes(query),
+          po.poNumber.toLowerCase().includes(query) ||
+          Array.from(po.prNumbers).some((pr) =>
+            pr.toLowerCase().includes(query),
           ) ||
           po.vendorName?.toLowerCase().includes(query),
       );
@@ -127,13 +152,9 @@ export default function ListPO({
             new Date(b.poDate || "").getTime()
           );
         case "poNumber-asc":
-          return (a.poNumber || "").localeCompare(
-            b.poNumber || "",
-          );
+          return a.poNumber.localeCompare(b.poNumber);
         case "poNumber-desc":
-          return (b.poNumber || "").localeCompare(
-            a.poNumber || "",
-          );
+          return b.poNumber.localeCompare(a.poNumber);
         case "vendor-asc":
           return (a.vendorName || "").localeCompare(
             b.vendorName || "",
@@ -156,22 +177,21 @@ export default function ListPO({
     console.log("View PO:", po.poNumber);
   };
 
-  const handleViewRelatedPR = (prNumber: string) => {
-    console.log("View related PR:", prNumber);
-  };
-
   const handleDownloadPO = (po: any) => {
     console.log("Download PO:", po.poNumber);
   };
 
   const handleDeletePO = (po: any) => {
-    const prNumbers = po.requests.map(
-      (r: ProcurementRequest) => r.prNumber,
+    const prNumbersArray = Array.from(po.prNumbers) as string[];
+    // Find requests involved to pass to confirmation
+    const affectedRequests = localRequests.filter((r) =>
+      prNumbersArray.includes(r.prNumber),
     );
+
     setDeleteConfirm({
-      poNumber: po.poNumber || "",
-      prNumbers,
-      affectedRequests: po.requests,
+      poNumber: po.poNumber,
+      prNumbers: prNumbersArray,
+      affectedRequests: affectedRequests,
     });
   };
 
@@ -181,7 +201,6 @@ export default function ListPO({
     const { poNumber, affectedRequests } = deleteConfirm;
     const currentTimestamp = new Date().toISOString();
 
-    // Create activity log entry for deletion
     const generateActivityLog = (
       prNumber: string,
     ): ActivityLog => ({
@@ -189,40 +208,45 @@ export default function ListPO({
       timestamp: currentTimestamp,
       user: "System",
       action: "PO Deleted",
-      details: `PO ${poNumber} was deleted. Status reverted from "On Process by Vendor" to "Waiting PO". All items reset to "Not Set" status.`,
+      details: `PO ${poNumber} was deleted. Affected items reverted to "Waiting PO" status.`,
     });
 
-    // Update all requests that were part of this PO
+    // Update requests: Find items with this PO Number and revert them
     const updatedRequests = localRequests.map((req) => {
-      // Check if this request was part of the deleted PO
-      const wasInDeletedPO = affectedRequests.some(
-        (ar) => ar.prNumber === req.prNumber,
+      const hasAffectedItems = req.items.some(
+        (item) => item.poNumber === poNumber,
       );
 
-      if (wasInDeletedPO && req.poNumber === poNumber) {
-        // Revert all items' itemStatus to "Not Set"
-        const revertedItems = req.items.map((item) => ({
-          ...item,
-          itemStatus: "Not Set" as const,
-        }));
+      if (hasAffectedItems) {
+        const revertedItems = req.items.map((item) => {
+          if (item.poNumber === poNumber) {
+            return {
+              ...item,
+              itemStatus: "Not Set" as const, // Reset readiness
+              status: "Waiting PO" as const, // Revert workflow status
+              poNumber: undefined,
+              poDate: undefined,
+            };
+          }
+          return item;
+        });
 
-        // Get existing activity log or initialize empty array
+        // Also check if we need to revert the Request-level status summary
+        // If all items are now waiting PO, the request is Waiting PO
+        // Simplification: Set to Waiting PO if it was On Process
+        const newReqStatus =
+          req.status === "On Process by Vendor"
+            ? "Waiting PO"
+            : req.status;
+
         const existingLog = req.activityLog || [];
-
-        // Add new activity log entry
         const newActivityLog = generateActivityLog(
           req.prNumber,
         );
 
-        // Return updated request
         return {
           ...req,
-          status: "Waiting PO" as const,
-          poNumber: undefined,
-          poDate: undefined,
-          poFileLink: undefined,
-          estimatedDeliveryStart: undefined,
-          estimatedDeliveryEnd: undefined,
+          status: newReqStatus,
           items: revertedItems,
           activityLog: [...existingLog, newActivityLog],
         };
@@ -230,28 +254,13 @@ export default function ListPO({
       return req;
     });
 
-    // Update local state
     setLocalRequests(updatedRequests);
 
-    // Notify parent component
     if (onRequestsUpdate) {
       onRequestsUpdate(updatedRequests);
     }
 
-    // Get list of affected PR numbers for user feedback
-    const affectedPRs = affectedRequests
-      .map((r) => r.prNumber)
-      .join(", ");
-
-    // Show success message
-    alert(
-      `PO ${poNumber} has been deleted successfully.\n\n` +
-        `Affected PRs: ${affectedPRs}\n\n` +
-        `All items have been reverted to "Waiting PO" status with "Not Set" item status.\n` +
-        `Activity has been logged for all affected requests.`,
-    );
-
-    // Close confirmation modal
+    alert(`PO ${poNumber} has been deleted successfully.`);
     setDeleteConfirm(null);
   };
 
@@ -264,21 +273,6 @@ export default function ListPO({
     });
   };
 
-  const calculateTotalAmount = (po: any) => {
-    return po.requests.reduce(
-      (sum: number, req: ProcurementRequest) => {
-        return (
-          sum +
-          req.items.reduce(
-            (itemSum, item) => itemSum + (item.totalPrice || 0),
-            0,
-          )
-        );
-      },
-      0,
-    );
-  };
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -288,26 +282,11 @@ export default function ListPO({
     }).format(amount);
   };
 
-  const getPOStatus = (po: any) => {
-    const allItems = po.requests.flatMap(
-      (r: ProcurementRequest) => r.items,
-    );
-    const allCancelled = allItems.every(
-      (item) => item.itemStatus === "Cancelled",
-    );
-    const allReady = allItems.every(
-      (item) => item.itemStatus === "Ready",
-    );
-
-    if (allCancelled) return "Cancelled";
-    if (allReady && po.status === "Delivered") return "Closed";
-    return "Outstanding";
-  };
-
+  // Logic to show badge based on item statuses in the PO group
   const getPOStatusBadge = (status: string) => {
     const colors = {
-      Outstanding: "bg-amber-100 text-amber-800",
-      Closed: "bg-green-100 text-green-800",
+      "On Process by Vendor": "bg-purple-100 text-purple-800",
+      Delivered: "bg-green-100 text-green-800",
       Cancelled: "bg-red-100 text-red-800",
     };
     return (
@@ -316,19 +295,8 @@ export default function ListPO({
     );
   };
 
-  const getPRNumbersDisplay = (
-    requests: ProcurementRequest[],
-  ) => {
-    const prNumbers = requests.map((r) => r.prNumber);
-    if (prNumbers.length === 1) {
-      return prNumbers[0];
-    }
-    return `${prNumbers[0]} +${prNumbers.length - 1} more`;
-  };
-
   return (
     <div>
-      {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
           Purchase Order List
@@ -338,10 +306,8 @@ export default function ListPO({
         </p>
       </div>
 
-      {/* Search and Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
         <div className="flex gap-4 items-center flex-wrap">
-          {/* Search Bar */}
           <div className="flex-1 min-w-[300px] relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -361,7 +327,6 @@ export default function ListPO({
             )}
           </div>
 
-          {/* Status Filter */}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -374,7 +339,6 @@ export default function ListPO({
             <option value="Delivered">Delivered</option>
           </select>
 
-          {/* Vendor Filter */}
           <select
             value={vendorFilter}
             onChange={(e) => setVendorFilter(e.target.value)}
@@ -388,7 +352,6 @@ export default function ListPO({
             ))}
           </select>
 
-          {/* Sort */}
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
@@ -409,7 +372,6 @@ export default function ListPO({
         </div>
       </div>
 
-      {/* PO Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
@@ -421,7 +383,7 @@ export default function ListPO({
                 PR Number(s)
               </th>
               <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">
-                PO Date Created
+                PO Date
               </th>
               <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">
                 Vendor Name
@@ -430,10 +392,10 @@ export default function ListPO({
                 Payment Terms
               </th>
               <th className="px-6 py-4 text-left text-sm font-medium text-gray-700">
-                PO Status
+                Status
               </th>
               <th className="px-6 py-4 text-right text-sm font-medium text-gray-700">
-                Total Amount
+                Amount
               </th>
               <th className="px-6 py-4 text-right text-sm font-medium text-gray-700">
                 Actions
@@ -455,23 +417,8 @@ export default function ListPO({
                       No Purchase Orders Found
                     </div>
                     <div className="text-gray-500 text-sm">
-                      There are no POs matching your search or
-                      filter criteria.
+                      There are no POs matching your criteria.
                     </div>
-                    {(searchQuery ||
-                      statusFilter !== "all" ||
-                      vendorFilter !== "all") && (
-                      <button
-                        onClick={() => {
-                          setSearchQuery("");
-                          setStatusFilter("all");
-                          setVendorFilter("all");
-                        }}
-                        className="px-4 py-2 text-[#ec2224] hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        Clear Filters
-                      </button>
-                    )}
                   </div>
                 </td>
               </tr>
@@ -488,21 +435,14 @@ export default function ListPO({
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col gap-1">
-                      {po.requests.map(
-                        (
-                          req: ProcurementRequest,
-                          idx: number,
-                        ) => (
-                          <button
-                            key={req.prNumber}
-                            onClick={() =>
-                              handleViewRelatedPR(req.prNumber)
-                            }
-                            className="text-[#ec2224] hover:underline flex items-center gap-1 text-sm"
+                      {Array.from(po.prNumbers).map(
+                        (pr: any) => (
+                          <span
+                            key={pr}
+                            className="text-[#ec2224] text-sm"
                           >
-                            {req.prNumber}
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
+                            {pr}
+                          </span>
                         ),
                       )}
                     </div>
@@ -518,35 +458,31 @@ export default function ListPO({
                   </td>
                   <td className="px-6 py-4">
                     <span
-                      className={`px-3 py-1 rounded-full text-xs font-medium ${getPOStatusBadge(getPOStatus(po))}`}
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${getPOStatusBadge(po.status)}`}
                     >
-                      {getPOStatus(po)}
+                      {po.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right font-medium text-gray-900">
-                    {formatCurrency(calculateTotalAmount(po))}
+                    {formatCurrency(po.totalAmount)}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex justify-end items-center gap-2">
                       <button
                         onClick={() => handleViewPO(po)}
                         className="px-3 py-2 text-[#ec2224] hover:bg-red-50 rounded-lg transition-colors flex items-center gap-2 text-sm"
-                        title="View PO"
                       >
-                        <Eye className="w-4 h-4" />
-                        View
+                        <Eye className="w-4 h-4" /> View
                       </button>
                       <button
                         onClick={() => handleDownloadPO(po)}
                         className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        title="Download PO"
                       >
                         <Download className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeletePO(po)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete PO"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -559,27 +495,10 @@ export default function ListPO({
         </table>
       </div>
 
-      {/* Results Count */}
-      {filteredAndSortedPOs.length > 0 && (
-        <div className="mt-4 text-sm text-gray-600">
-          Showing {filteredAndSortedPOs.length} of{" "}
-          {purchaseOrders.length} purchase orders
-        </div>
-      )}
-
-      {/* Confirmation Modal */}
       {deleteConfirm && (
         <ConfirmationModal
           title="Delete Purchase Order?"
-          message={
-            `Are you sure you want to delete PO ${deleteConfirm.poNumber}?\n\n` +
-            `This will affect the following PR(s):\n${deleteConfirm.prNumbers.join(", ")}\n\n` +
-            `All affected items will be:\n` +
-            `• Reverted from "On Process by Vendor" to "Waiting PO" status\n` +
-            `• Item status reset to "Not Set"\n` +
-            `• Activity logged in each request\n\n` +
-            `This action cannot be undone.`
-          }
+          message={`Are you sure you want to delete PO ${deleteConfirm.poNumber}? This will revert affected items to "Waiting PO" status.`}
           confirmLabel="Delete PO"
           confirmStyle="danger"
           onConfirm={confirmDeletePO}

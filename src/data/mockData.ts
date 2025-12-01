@@ -1,4 +1,5 @@
-//mockData.ts
+// src/data/mockData.ts
+
 export interface ActivityLog {
   id: string;
   timestamp: string;
@@ -7,26 +8,134 @@ export interface ActivityLog {
   details?: string;
 }
 
+// Status type
+export type ProcurementStatus =
+  | "Review by Procurement"
+  | "Waiting PO"
+  | "On Process by Vendor"
+  | "Delivered"
+  | "Finished";
+
+export type ItemStatus = "Not Set" | "Cancelled" | "Ready";
+
+export type PaymentTerms =
+  | "Cash Before Delivery"
+  | "Payment Terms";
+
+// Daftar Region Indonesia
+export const INDONESIA_REGIONS = [
+  "Nanggroe Aceh Darussalam",
+  "Sumatera Utara",
+  "Sumatera Selatan",
+  "Sumatera Barat",
+  "Bengkulu",
+  "Riau",
+  "Kepulauan Riau",
+  "Jambi",
+  "Lampung",
+  "Bangka Belitung",
+  "Kalimantan Barat",
+  "Kalimantan Timur",
+  "Kalimantan Selatan",
+  "Kalimantan Tengah",
+  "Kalimantan Utara",
+  "Banten",
+  "DKI Jakarta",
+  "Jawa Barat",
+  "Jawa Tengah",
+  "Daerah Istimewa Yogyakarta",
+  "Jawa Timur",
+  "Bali",
+  "Nusa Tenggara Timur",
+  "Nusa Tenggara Barat",
+  "Gorontalo",
+  "Sulawesi Barat",
+  "Sulawesi Tengah",
+  "Sulawesi Utara",
+  "Sulawesi Tenggara",
+  "Sulawesi Selatan",
+  "Maluku Utara",
+  "Maluku",
+  "Papua Barat",
+  "Papua",
+  "Papua Tengah",
+  "Papua Pegunungan",
+  "Papua Selatan",
+  "Papua Barat Daya",
+];
+
+// Individual procurement item
+export interface ProcurementItem {
+  id: string;
+  prNumber: string;
+  itemCode: string;
+  itemName: string;
+  itemCategory: string;
+  selectedProperties: Record<string, string>;
+  quantity: number;
+  uom: string;
+
+  // Region attached to item
+  region: string;
+
+  itemStatus: ItemStatus;
+  status: ProcurementStatus;
+
+  poNumber?: string;
+  poDate?: string;
+  designLink?: string;
+  vendorName?: string;
+  vendorCode?: string;
+  paymentTerms?: PaymentTerms;
+  unitPrice?: number;
+  taxPercentage?: number;
+  taxAmount?: number;
+  totalPrice?: number;
+  isFixedPrice?: boolean;
+  estimatedDeliveryStart?: string;
+  estimatedDeliveryEnd?: string;
+}
+
+export interface ProcurementRequest {
+  prNumber: string;
+  prDate: string;
+  propertyName: string;
+  propertyCode: string;
+  propertyType: string;
+  brandName: string;
+  propertyAddress: string;
+  picName: string;
+  picNumber: string;
+  requestorName: string;
+  requestorEmail: string;
+
+  // Fallback/Legacy fields
+  poFileLink?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceFileLink?: string;
+
+  items: ProcurementItem[];
+  activityLog?: ActivityLog[];
+}
+
 export const vendors = [
   {
     vendorCode: "VND001",
     vendorName: "PT Furnindo Makmur",
-    vendorIsland: "Java",
+    vendorRegion: ["DKI Jakarta", "Jawa Barat", "Banten"],
     vendorAddress: "Jl. Industri No. 123, Jakarta Pusat",
     vendorEmail: "contact@furnindo.com",
     vendorPhone: "+62 21 1234 5678",
     vendorAgreementLink: "#",
-    // Tax Configuration
     ppnPercentage: 11,
     serviceChargePercentage: 0,
     pb1Percentage: 0,
-    // Payment Methods
     paymentMethods: [
       "Cash Before Delivery",
       "Payment Terms - NET 30",
       "Bank Transfer",
     ],
-    // Agreements/Offerings
     agreements: [
       {
         id: "agr-001",
@@ -35,6 +144,14 @@ export const vendors = [
         startDate: "2025-01-01",
         endDate: "2025-12-31",
         documentLink: "https://drive.google.com/agreement-001",
+      },
+      {
+        id: "agr-010",
+        type: "Agreement" as const,
+        number: "AGR-2025-10", // The specific agreement requested
+        startDate: "2025-01-01",
+        endDate: "2025-12-31",
+        documentLink: "#",
       },
     ],
     items: [
@@ -49,28 +166,49 @@ export const vendors = [
         agreementNumber: "AGR-2025-001",
         taxPercentage: 11,
       },
+      // SPECIFIC REQUESTED ITEM: Blue Shirt XL
+      {
+        itemCode: "ITM004",
+        itemName: "Blue Shirt",
+        selectedProperties: { Size: "XL" },
+        minQuantity: 5,
+        multipleOf: 1,
+        priceType: "Fixed" as const,
+        unitPrice: 10000, // Requested Price
+        agreementNumber: "AGR-2025-10", // Requested Agreement
+        taxPercentage: 11,
+      },
+      // Additional Item
+      {
+        itemCode: "ITM005",
+        itemName: "Red Pillow",
+        selectedProperties: { Size: "King Size" },
+        minQuantity: 10,
+        multipleOf: 2,
+        priceType: "Fixed" as const,
+        unitPrice: 75000,
+        agreementNumber: "AGR-2025-001",
+        taxPercentage: 11,
+      },
     ],
     isActive: true,
   },
   {
     vendorCode: "VND002",
     vendorName: "CV Branding Solutions",
-    vendorIsland: "Bali",
+    vendorRegion: ["Bali", "Nusa Tenggara Barat"],
     vendorAddress: "Jl. Sunset Road No. 45, Kuta",
     vendorEmail: "info@brandingsolutions.com",
     vendorPhone: "+62 361 987 654",
     vendorAgreementLink: "#",
-    // Tax Configuration
     ppnPercentage: 11,
     serviceChargePercentage: 2,
     pb1Percentage: 0,
-    // Payment Methods
     paymentMethods: [
       "Cash Before Delivery",
       "Payment Terms - NET 45",
       "Credit Card",
     ],
-    // Agreements/Offerings
     agreements: [
       {
         id: "off-001",
@@ -102,22 +240,19 @@ export const vendors = [
   {
     vendorCode: "VND003",
     vendorName: "Amenities Supplier Co.",
-    vendorIsland: "Java",
+    vendorRegion: ["Jawa Barat", "DKI Jakarta"],
     vendorAddress: "Jl. Gatot Subroto 789, Bandung",
     vendorEmail: "sales@amenitiessupplier.co.id",
     vendorPhone: "+62 22 456 7890",
     vendorAgreementLink: "#",
-    // Tax Configuration
     ppnPercentage: 11,
     serviceChargePercentage: 0,
     pb1Percentage: 1,
-    // Payment Methods
     paymentMethods: [
       "Cash Before Delivery",
       "Bank Transfer",
       "Cash on Delivery (COD)",
     ],
-    // Agreements/Offerings
     agreements: [],
     items: [
       {
@@ -127,7 +262,39 @@ export const vendors = [
         minQuantity: 20,
         multipleOf: 10,
         priceType: "Not Fixed" as const,
-        unitPrice: 0, // No price configured - manual input required
+        unitPrice: 0,
+        agreementNumber: "",
+        taxPercentage: 11,
+      },
+    ],
+    isActive: true,
+  },
+  // NEW VENDOR FOR MORE DATA
+  {
+    vendorCode: "VND004",
+    vendorName: "CV Textile Sejahtera",
+    vendorRegion: ["Jawa Tengah", "Daerah Istimewa Yogyakarta"],
+    vendorAddress: "Jl. Solo No. 55, Yogyakarta",
+    vendorEmail: "sales@textilesejahtera.com",
+    vendorPhone: "+62 274 555 666",
+    vendorAgreementLink: "#",
+    ppnPercentage: 11,
+    serviceChargePercentage: 0,
+    pb1Percentage: 0,
+    paymentMethods: ["Cash Before Delivery", "Bank Transfer"],
+    agreements: [],
+    items: [
+      {
+        itemCode: "ITM002",
+        itemName: "Room Signage",
+        selectedProperties: {
+          Material: "Metal",
+          Size: "20x30cm",
+        },
+        minQuantity: 10,
+        multipleOf: 1,
+        priceType: "Not Fixed" as const,
+        unitPrice: 0,
         agreementNumber: "",
         taxPercentage: 11,
       },
@@ -216,72 +383,6 @@ export const items = [
   },
 ];
 
-// Status type - updated to 4 statuses
-export type ProcurementStatus =
-  | "Review by Procurement"
-  | "Waiting PO"
-  | "On Process by Vendor"
-  | "Delivered";
-
-export type ItemStatus = "Not Set" | "Cancelled" | "Ready";
-
-export type PaymentTerms =
-  | "Cash Before Delivery"
-  | "Payment Terms";
-
-// Individual procurement item
-export interface ProcurementItem {
-  id: string;
-  prNumber: string; // CF_REQ_XXXX format
-  itemCode: string;
-  itemName: string;
-  itemCategory: string;
-  selectedProperties: Record<string, string>;
-  quantity: number;
-  uom: string;
-  itemStatus: ItemStatus;
-  designLink?: string;
-  // Item-level vendor and payment info
-  vendorName?: string;
-  vendorCode?: string;
-  paymentTerms?: PaymentTerms;
-  // Pricing
-  unitPrice?: number;
-  taxPercentage?: number;
-  taxAmount?: number;
-  totalPrice?: number;
-}
-
-// Purchase request (can have multiple items)
-export interface ProcurementRequest {
-  prNumber: string; // CF_REQ_XXXX format
-  prDate: string;
-  propertyName: string;
-  propertyCode: string;
-  propertyType: string;
-  brandName: string;
-  propertyAddress: string;
-  picName: string;
-  picNumber: string;
-  requestorName: string;
-  requestorEmail: string;
-  status: ProcurementStatus;
-  vendorName?: string;
-  vendorCode?: string;
-  paymentTerms?: PaymentTerms;
-  poNumber?: string; // PO2025XXXXXXVIIDRMI format
-  poDate?: string;
-  poFileLink?: string;
-  estimatedDeliveryStart?: string;
-  estimatedDeliveryEnd?: string;
-  invoiceNumber?: string;
-  invoiceDate?: string;
-  invoiceFileLink?: string;
-  items: ProcurementItem[];
-  activityLog?: ActivityLog[];
-}
-
-// Mock procurement requests with new structure
 export const procurementRequests: ProcurementRequest[] = [
   {
     prNumber: "CF_REQ_6304",
@@ -295,10 +396,9 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 812 3456 7890",
     requestorName: "Jane Smith",
     requestorEmail: "jane.smith@reddoorz.com",
-    status: "Review by Procurement",
     activityLog: [
       {
-        id: "log-" + Date.now(),
+        id: "log-1",
         timestamp: "2024-11-20T09:15:00",
         user: "jane.smith@reddoorz.com",
         action: "Request Created",
@@ -306,6 +406,7 @@ export const procurementRequests: ProcurementRequest[] = [
       },
     ],
     items: [
+      // TEST CASE 1: Blue Shirt XL in DKI Jakarta (Should match VND001)
       {
         id: "1-1",
         prNumber: "CF_REQ_6304",
@@ -315,7 +416,9 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Size: "XL" },
         quantity: 50,
         uom: "pcs",
+        region: "DKI Jakarta",
         itemStatus: "Not Set",
+        status: "Review by Procurement",
         designLink: "https://figma.com/design/example",
       },
       {
@@ -327,8 +430,9 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Size: "King Size" },
         quantity: 30,
         uom: "pcs",
+        region: "DKI Jakarta",
         itemStatus: "Not Set",
-        designLink: "",
+        status: "Review by Procurement",
       },
       {
         id: "1-3",
@@ -339,8 +443,9 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Size: "70x140cm" },
         quantity: 20,
         uom: "pcs",
+        region: "DKI Jakarta",
         itemStatus: "Not Set",
-        designLink: "",
+        status: "Review by Procurement",
       },
     ],
   },
@@ -356,10 +461,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 821 9876 5432",
     requestorName: "Mike Brown",
     requestorEmail: "mike.brown@reddoorz.com",
-    status: "Waiting PO",
-    vendorName: "Amenities Supplier Co.",
-    vendorCode: "VND003",
-    paymentTerms: "Payment Terms",
     items: [
       {
         id: "2-1",
@@ -370,8 +471,12 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Type: "Premium" },
         quantity: 100,
         uom: "sets",
+        region: "Bali",
         itemStatus: "Ready",
-        designLink: "",
+        status: "Waiting PO",
+        vendorName: "Amenities Supplier Co.",
+        vendorCode: "VND003",
+        paymentTerms: "Payment Terms",
         unitPrice: 35000,
         taxPercentage: 11,
         taxAmount: 385000,
@@ -391,13 +496,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 813 2468 1357",
     requestorName: "Emily Chen",
     requestorEmail: "emily.chen@reddoorz.com",
-    status: "Waiting PO",
-    vendorName: "CV Branding Solutions",
-    vendorCode: "VND002",
-    paymentTerms: "Cash Before Delivery",
-    poNumber: "PO2025000240VIIDRMI",
-    poDate: "2024-11-19",
-    poFileLink: "#",
     items: [
       {
         id: "3-1",
@@ -411,8 +509,13 @@ export const procurementRequests: ProcurementRequest[] = [
         },
         quantity: 25,
         uom: "pcs",
+        region: "DKI Jakarta",
         itemStatus: "Ready",
+        status: "Waiting PO",
         designLink: "https://figma.com/design/example2",
+        vendorName: "CV Branding Solutions",
+        vendorCode: "VND002",
+        paymentTerms: "Cash Before Delivery",
         unitPrice: 150000,
         taxPercentage: 11,
         taxAmount: 412500,
@@ -432,15 +535,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 822 1122 3344",
     requestorName: "Robert Taylor",
     requestorEmail: "robert.taylor@reddoorz.com",
-    status: "On Process by Vendor",
-    vendorName: "PT Furnindo Makmur",
-    vendorCode: "VND001",
-    paymentTerms: "Payment Terms",
-    poNumber: "PO2025000241VIIDRMI",
-    poDate: "2024-11-16",
-    poFileLink: "#",
-    estimatedDeliveryStart: "2024-11-25",
-    estimatedDeliveryEnd: "2024-11-28",
     items: [
       {
         id: "4-1",
@@ -451,12 +545,20 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Color: "Gray", Size: "Medium" },
         quantity: 75,
         uom: "pcs",
+        region: "Bali",
         itemStatus: "Ready",
-        designLink: "",
+        status: "On Process by Vendor",
+        poNumber: "PO2025000241VIIDRMI",
+        poDate: "2024-11-16",
+        vendorName: "PT Furnindo Makmur",
+        vendorCode: "VND001",
+        paymentTerms: "Payment Terms",
         unitPrice: 45000,
         taxPercentage: 11,
         taxAmount: 371250,
         totalPrice: 3746250,
+        estimatedDeliveryStart: "2024-11-25",
+        estimatedDeliveryEnd: "2024-11-28",
       },
     ],
   },
@@ -472,15 +574,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 274 123 456",
     requestorName: "Chris Martin",
     requestorEmail: "chris.martin@reddoorz.com",
-    status: "On Process by Vendor",
-    vendorName: "CV Branding Solutions",
-    vendorCode: "VND002",
-    paymentTerms: "Cash Before Delivery",
-    poNumber: "PO2025000242VIIDRMI",
-    poDate: "2024-11-12",
-    poFileLink: "#",
-    estimatedDeliveryStart: "2024-11-20",
-    estimatedDeliveryEnd: "2024-11-22",
     items: [
       {
         id: "5-1",
@@ -494,12 +587,21 @@ export const procurementRequests: ProcurementRequest[] = [
         },
         quantity: 30,
         uom: "pcs",
+        region: "Daerah Istimewa Yogyakarta",
         itemStatus: "Ready",
+        status: "On Process by Vendor",
+        poNumber: "PO2025000242VIIDRMI",
+        poDate: "2024-11-12",
         designLink: "https://figma.com/design/example3",
+        vendorName: "CV Branding Solutions",
+        vendorCode: "VND002",
+        paymentTerms: "Cash Before Delivery",
         unitPrice: 180000,
         taxPercentage: 11,
         taxAmount: 594000,
         totalPrice: 5994000,
+        estimatedDeliveryStart: "2024-11-20",
+        estimatedDeliveryEnd: "2024-11-22",
       },
     ],
   },
@@ -515,15 +617,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 31 987 654",
     requestorName: "Alex Turner",
     requestorEmail: "alex.turner@reddoorz.com",
-    status: "Delivered",
-    vendorName: "PT Furnindo Makmur",
-    vendorCode: "VND001",
-    paymentTerms: "Payment Terms",
-    poNumber: "PO2025000243VIIDRMI",
-    poDate: "2024-11-09",
-    poFileLink: "#",
-    estimatedDeliveryStart: "2024-11-18",
-    estimatedDeliveryEnd: "2024-11-20",
     invoiceNumber: "INV-2024-001",
     invoiceDate: "2024-11-21",
     invoiceFileLink: "#",
@@ -537,16 +630,23 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Color: "Red", Size: "Large" },
         quantity: 60,
         uom: "pcs",
+        region: "Jawa Timur",
         itemStatus: "Ready",
-        designLink: "",
+        status: "Delivered",
+        poNumber: "PO2025000243VIIDRMI",
+        poDate: "2024-11-09",
+        vendorName: "PT Furnindo Makmur",
+        vendorCode: "VND001",
+        paymentTerms: "Payment Terms",
         unitPrice: 55000,
         taxPercentage: 11,
         taxAmount: 363000,
         totalPrice: 3663000,
+        estimatedDeliveryStart: "2024-11-18",
+        estimatedDeliveryEnd: "2024-11-20",
       },
     ],
   },
-  // Additional Waiting PO requests for Generate PO testing
   {
     prNumber: "CF_REQ_6310",
     prDate: "2024-11-17",
@@ -559,7 +659,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 812 9999 8888",
     requestorName: "Kevin Tan",
     requestorEmail: "kevin.tan@reddoorz.com",
-    status: "Waiting PO",
     items: [
       {
         id: "7-1",
@@ -570,7 +669,9 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Type: "Premium" },
         quantity: 50,
         uom: "sets",
+        region: "DKI Jakarta",
         itemStatus: "Not Set",
+        status: "Waiting PO",
         vendorName: "Amenities Supplier Co.",
         vendorCode: "VND003",
         paymentTerms: "Payment Terms",
@@ -593,7 +694,6 @@ export const procurementRequests: ProcurementRequest[] = [
     picNumber: "+62 822 7777 6666",
     requestorName: "Diana Chen",
     requestorEmail: "diana.chen@reddoorz.com",
-    status: "Waiting PO",
     items: [
       {
         id: "8-1",
@@ -604,7 +704,9 @@ export const procurementRequests: ProcurementRequest[] = [
         selectedProperties: { Color: "White", Size: "Large" },
         quantity: 100,
         uom: "pcs",
+        region: "Jawa Barat",
         itemStatus: "Not Set",
+        status: "Waiting PO",
         vendorName: "PT Furnindo Makmur",
         vendorCode: "VND001",
         paymentTerms: "Cash Before Delivery",

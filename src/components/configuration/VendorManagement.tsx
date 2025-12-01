@@ -1,40 +1,47 @@
-import { useState, useMemo } from 'react';
-import { Plus, Edit2, Package } from 'lucide-react';
-import { vendors } from '../../data/mockData';
-import VendorFormModal from './VendorFormModalUpdated';
-import ConfirmationModal from './ConfirmationModal';
-import Toast from '../Toast';
-import Toggle from '../Toggle';
-import type { PaymentMethod } from './PaymentMethodConfiguration';
+import { useState, useMemo } from "react";
+import { Plus, Edit2, Package } from "lucide-react";
+import { vendors } from "../../data/mockData";
+import VendorFormModal from "./VendorFormModalUpdated";
+import ConfirmationModal from "./ConfirmationModal";
+import Toast from "../Toast";
+import Toggle from "../Toggle";
+import type { PaymentMethod } from "./PaymentMethodConfiguration";
 
-export type Vendor = typeof vendors[0];
+export type Vendor = (typeof vendors)[0];
 
 // Mock active payment methods - in real app, this would come from context or props
 const mockActivePaymentMethods = [
-  'Cash Before Delivery',
-  'Payment Terms - NET 30',
-  'Payment Terms - NET 45',
-  'Bank Transfer',
-  'Credit Card',
-  'Cash on Delivery (COD)'
+  "Cash Before Delivery",
+  "Payment Terms - NET 30",
+  "Payment Terms - NET 45",
+  "Bank Transfer",
+  "Credit Card",
+  "Cash on Delivery (COD)",
 ];
 
 export default function VendorManagement() {
   const [vendorsList, setVendorsList] = useState(vendors);
   const [showModal, setShowModal] = useState(false);
-  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [editingVendor, setEditingVendor] =
+    useState<Vendor | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'activate' | 'deactivate';
+    type: "activate" | "deactivate";
     vendor: Vendor;
   } | null>(null);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+  const [filterStatus, setFilterStatus] = useState<
+    "all" | "active" | "inactive"
+  >("all");
 
   // Filter vendors based on status
   const filteredVendors = useMemo(() => {
-    if (filterStatus === 'all') return vendorsList;
-    if (filterStatus === 'active') return vendorsList.filter(vendor => vendor.isActive);
-    return vendorsList.filter(vendor => !vendor.isActive);
+    if (filterStatus === "all") return vendorsList;
+    if (filterStatus === "active")
+      return vendorsList.filter((vendor) => vendor.isActive);
+    return vendorsList.filter((vendor) => !vendor.isActive);
   }, [vendorsList, filterStatus]);
 
   const handleAddVendor = () => {
@@ -49,8 +56,8 @@ export default function VendorManagement() {
 
   const handleToggleActive = (vendor: Vendor) => {
     setConfirmAction({
-      type: vendor.isActive ? 'deactivate' : 'activate',
-      vendor
+      type: vendor.isActive ? "deactivate" : "activate",
+      vendor,
     });
   };
 
@@ -60,13 +67,15 @@ export default function VendorManagement() {
     const { type, vendor } = confirmAction;
     setVendorsList((prev) =>
       prev.map((v) =>
-        v.vendorCode === vendor.vendorCode ? { ...v, isActive: !v.isActive } : v
-      )
+        v.vendorCode === vendor.vendorCode
+          ? { ...v, isActive: !v.isActive }
+          : v,
+      ),
     );
 
     setToast({
-      message: `Vendor ${type === 'activate' ? 'activated' : 'deactivated'} successfully`,
-      type: 'success'
+      message: `Vendor ${type === "activate" ? "activated" : "deactivated"} successfully`,
+      type: "success",
     });
 
     setTimeout(() => setToast(null), 5000);
@@ -77,7 +86,11 @@ export default function VendorManagement() {
     if (editingVendor) {
       // Update existing
       setVendorsList((prev) =>
-        prev.map((v) => (v.vendorCode === editingVendor.vendorCode ? vendor : v))
+        prev.map((v) =>
+          v.vendorCode === editingVendor.vendorCode
+            ? vendor
+            : v,
+        ),
       );
     } else {
       // Add new
@@ -86,8 +99,8 @@ export default function VendorManagement() {
     setShowModal(false);
 
     setToast({
-      message: `Vendor ${editingVendor ? 'updated' : 'created'} successfully`,
-      type: 'success'
+      message: `Vendor ${editingVendor ? "updated" : "created"} successfully`,
+      type: "success",
     });
     setTimeout(() => setToast(null), 5000);
   };
@@ -101,7 +114,11 @@ export default function VendorManagement() {
           {/* Filter Dropdown */}
           <select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
+            onChange={(e) =>
+              setFilterStatus(
+                e.target.value as "all" | "active" | "inactive",
+              )
+            }
             className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
           >
             <option value="all">All</option>
@@ -130,13 +147,17 @@ export default function VendorManagement() {
             <div
               key={vendor.vendorCode}
               className={`bg-white border border-gray-200 rounded-lg p-6 hover:shadow-lg transition-shadow ${
-                !vendor.isActive ? 'opacity-75' : ''
+                !vendor.isActive ? "opacity-75" : ""
               }`}
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className="text-gray-900 mb-1">{vendor.vendorName}</h3>
-                  <p className="text-gray-600 text-sm">{vendor.vendorCode}</p>
+                  <h3 className="text-gray-900 mb-1">
+                    {vendor.vendorName}
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    {vendor.vendorCode}
+                  </p>
                 </div>
                 {vendor.isActive ? (
                   <span className="inline-flex px-2 py-1 rounded-full text-xs bg-green-100 text-green-700">
@@ -151,20 +172,30 @@ export default function VendorManagement() {
 
               <div className="space-y-2 text-sm mb-4">
                 <div className="flex items-start gap-2">
-                  <span className="text-gray-500">Island:</span>
-                  <span className="text-gray-900">{vendor.vendorIsland}</span>
+                  <span className="text-gray-500">Region:</span>
+                  <span className="text-gray-900">
+                    {Array.isArray(vendor.vendorRegion)
+                      ? vendor.vendorRegion.join(", ")
+                      : vendor.vendorRegion}
+                  </span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-gray-500">Email:</span>
-                  <span className="text-gray-900">{vendor.vendorEmail}</span>
+                  <span className="text-gray-900">
+                    {vendor.vendorEmail}
+                  </span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="text-gray-500">Phone:</span>
-                  <span className="text-gray-900">{vendor.vendorPhone}</span>
+                  <span className="text-gray-900">
+                    {vendor.vendorPhone}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-gray-200 mt-2">
                   <Package className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-700">{vendor.items.length} items configured</span>
+                  <span className="text-gray-700">
+                    {vendor.items.length} items configured
+                  </span>
                 </div>
               </div>
 
@@ -191,7 +222,7 @@ export default function VendorManagement() {
                     onChange={() => handleToggleActive(vendor)}
                   />
                   <span className="text-sm text-gray-600">
-                    {vendor.isActive ? 'Active' : 'Inactive'}
+                    {vendor.isActive ? "Active" : "Inactive"}
                   </span>
                 </div>
               </div>
@@ -213,14 +244,26 @@ export default function VendorManagement() {
       {/* Confirmation Modal */}
       {confirmAction && (
         <ConfirmationModal
-          title={confirmAction.type === 'activate' ? 'Activate Vendor?' : 'Deactivate Vendor?'}
+          title={
+            confirmAction.type === "activate"
+              ? "Activate Vendor?"
+              : "Deactivate Vendor?"
+          }
           message={
-            confirmAction.type === 'activate'
+            confirmAction.type === "activate"
               ? `Are you sure you want to activate "${confirmAction.vendor.vendorName}"?\n\nThis vendor will become available in vendor assignment dropdowns.`
               : `Are you sure you want to deactivate "${confirmAction.vendor.vendorName}"?\n\nThis vendor will no longer appear in vendor assignment dropdowns but can be reactivated anytime.\n\n⚠️ Note: Existing requests assigned to this vendor will not be affected.`
           }
-          confirmLabel={confirmAction.type === 'activate' ? 'Activate Vendor' : 'Deactivate Vendor'}
-          confirmStyle={confirmAction.type === 'activate' ? 'primary' : 'secondary'}
+          confirmLabel={
+            confirmAction.type === "activate"
+              ? "Activate Vendor"
+              : "Deactivate Vendor"
+          }
+          confirmStyle={
+            confirmAction.type === "activate"
+              ? "primary"
+              : "secondary"
+          }
           onConfirm={handleConfirmToggle}
           onCancel={() => setConfirmAction(null)}
         />
