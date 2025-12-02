@@ -14,7 +14,6 @@ const supabase = createClient(supabaseUrl, publicAnonKey);
 // HELPERS: Data Mapping (DB <-> Frontend)
 // ========================================
 
-// 1. Helper to determine region
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
   const address = (row.property_address || "").toLowerCase();
@@ -57,7 +56,6 @@ const mapDBRequestToFrontend = (
       vendorCode: item.vendors?.code,
       paymentTerms: item.payment_terms,
       unitPrice: item.unit_price,
-      // Map WHT/Tax if stored on item level, otherwise default
       taxPercentage: item.tax_percentage || 0,
       totalPrice: item.total_price,
       poNumber: item.po_number,
@@ -103,7 +101,6 @@ export const procurementRequestsAPI = {
   save: async (
     request: ProcurementRequest,
   ): Promise<ProcurementRequest> => {
-    // ... (No changes needed here for this task, keeping existing logic)
     const derivedRegion =
       request.items[0]?.region || "DKI Jakarta";
 
@@ -133,23 +130,55 @@ export const procurementRequestsAPI = {
     if (prError) throw prError;
     const prId = prData.id;
 
-    // 2. Upsert Items
-    const itemsToUpsert = request.items.map((item) => ({
-      id: item.id && item.id.length > 30 ? item.id : undefined,
-      request_id: prId,
-      item_name_snapshot: item.itemName,
-      status: item.status,
-      item_status: item.itemStatus,
-      quantity: item.quantity,
-      uom: item.uom,
-      unit_price: item.unitPrice,
-      total_price: item.totalPrice,
-      tax_percentage: item.taxPercentage,
-      po_number: item.poNumber,
-      po_date: item.poDate ? new Date(item.poDate) : null,
-      estimated_delivery_start: item.estimatedDeliveryStart,
-      estimated_delivery_end: item.estimatedDeliveryEnd,
-    }));
+    // ---------------------------------------------------------
+    // FIX BUG #2: Fetch Vendor IDs to ensure assignments are saved
+    // ---------------------------------------------------------
+    const uniqueVendorCodes = Array.from(
+      new Set(
+        request.items.map((i) => i.vendorCode).filter(Boolean),
+      ),
+    ) as string[];
+
+    const vendorMap = new Map<string, string>();
+
+    if (uniqueVendorCodes.length > 0) {
+      const { data: vendors } = await supabase
+        .from("vendors")
+        .select("code, id")
+        .in("code", uniqueVendorCodes);
+
+      vendors?.forEach((v) => vendorMap.set(v.code, v.id));
+    }
+    // ---------------------------------------------------------
+
+    // 2. Upsert Items with correct Vendor ID
+    const itemsToUpsert = request.items.map((item) => {
+      // Resolve Vendor Code to UUID
+      const assignedVendorId = item.vendorCode
+        ? vendorMap.get(item.vendorCode)
+        : null;
+
+      return {
+        id:
+          item.id && item.id.length > 30 ? item.id : undefined,
+        request_id: prId,
+        item_name_snapshot: item.itemName,
+        status: item.status,
+        item_status: item.itemStatus,
+        quantity: item.quantity,
+        uom: item.uom,
+        // This maps the frontend vendor selection to the DB foreign key
+        assigned_vendor_id: assignedVendorId,
+        payment_terms: item.paymentTerms,
+        unit_price: item.unitPrice,
+        total_price: item.totalPrice,
+        tax_percentage: item.taxPercentage,
+        po_number: item.poNumber,
+        po_date: item.poDate ? new Date(item.poDate) : null,
+        estimated_delivery_start: item.estimatedDeliveryStart,
+        estimated_delivery_end: item.estimatedDeliveryEnd,
+      };
+    });
 
     if (itemsToUpsert.length > 0) {
       const { error: itemsError } = await supabase
@@ -160,6 +189,7 @@ export const procurementRequestsAPI = {
         console.error("Error saving items:", itemsError);
     }
 
+    // 3. Fetch Fresh Data
     const { data: freshData, error: refreshError } =
       await supabase
         .from("procurement_requests")
@@ -204,7 +234,6 @@ export const procurementRequestsAPI = {
 // ========================================
 // VENDORS API
 // ========================================
-
 export const vendorsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase.from("vendors")
@@ -219,7 +248,6 @@ export const vendorsAPI = {
     if (error) throw error;
 
     return data.map((v) => ({
-      // CRITICAL FIX 4b: Ensure 'id' is mapped so PO creation links correctly
       id: v.id,
       vendorCode: v.code,
       vendorName: v.name,
@@ -245,14 +273,12 @@ export const vendorsAPI = {
         unitPrice: vi.unit_price,
         minQuantity: vi.min_quantity,
         agreementNumber: vi.agreement_number,
-        // FIX 2: Map DB 'wht_percentage' to frontend 'taxPercentage'
         taxPercentage: vi.wht_percentage || 0,
       })),
     }));
   },
 
   save: async (vendor: any): Promise<any> => {
-    // 1. Save Vendor Header
     const { data: vendorData, error: vendorError } =
       await supabase
         .from("vendors")
@@ -283,7 +309,6 @@ export const vendorsAPI = {
     if (vendorError) throw vendorError;
     const vendorId = vendorData.id;
 
-    // 2. Save Vendor Catalog Items
     if (vendor.items && vendor.items.length > 0) {
       const itemCodes = vendor.items.map(
         (i: any) => i.itemCode,
@@ -310,13 +335,11 @@ export const vendorsAPI = {
             unit_price: vItem.unitPrice,
             min_quantity: vItem.minQuantity,
             agreement_number: vItem.agreementNumber,
-            // FIX 2: Save WHT percentage to DB
             wht_percentage: vItem.taxPercentage,
           };
         })
         .filter((i: any) => i !== null);
 
-      // Clean replace strategy
       await supabase
         .from("vendor_catalog_items")
         .delete()
@@ -698,7 +721,7 @@ export const purchaseOrdersAPI = {
       .from("purchase_orders")
       .insert({
         po_number: poData.poNumber,
-        vendor_id: poData.vendorId, // Fix 4b: Ensure this isn't undefined
+        vendor_id: poData.vendorId,
         generated_date: poData.generatedDate,
         total_amount: poData.totalAmount,
         status: "Open",
@@ -709,12 +732,8 @@ export const purchaseOrdersAPI = {
 
     if (poError) throw poError;
 
-    // 2. Link "Ready" Items to PO and Update Item-Level Data
-    // Fix 4a: We explicitly update status to 'Waiting PO Approval'
-    const itemIds = poData.items.map((i) => i.id);
-
-    // Bulk update approach for performance, assuming ETA and WHT are per-item but we can batch if identical
-    // However, since WHT might differ, we map.
+    // 2. REQUIREMENT 1: Update Item Status to "Waiting PO Approval"
+    // Using Promise.all for parallel updates
     const updates = poData.items.map((item) =>
       supabase
         .from("request_items")
@@ -722,7 +741,7 @@ export const purchaseOrdersAPI = {
           purchase_order_id: newPO.id,
           po_number: poData.poNumber,
           po_date: poData.generatedDate,
-          status: "Waiting PO Approval", // This updates the column in DB
+          status: "Waiting PO Approval", // Requirement 1 Enforced Here
           tax_percentage: item.whtPercentage,
           estimated_delivery_start: item.eta
             ? new Date(item.eta)
