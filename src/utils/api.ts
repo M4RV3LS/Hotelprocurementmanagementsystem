@@ -1,7 +1,10 @@
 // src/utils/api.ts
 import { createClient } from "@jsr/supabase__supabase-js";
 import { projectId, publicAnonKey } from "./supabase/info";
-import type { ProcurementRequest } from "../data/mockData";
+import type {
+  ProcurementRequest,
+  PurchaseOrder,
+} from "../data/mockData";
 
 // Initialize Supabase Client
 const supabaseUrl = `https://${projectId}.supabase.co`;
@@ -36,8 +39,8 @@ const mapDBRequestToFrontend = (
     prDate: row.pr_date,
     propertyName: row.property_name,
     propertyCode: row.property_code,
-    propertyType: "Hotel", // Default or map from DB if column exists
-    brandName: "RedDoorz", // Default or map
+    propertyType: "Hotel",
+    brandName: "RedDoorz",
     propertyAddress: row.property_address || "",
     picName: row.pic_name || "",
     picNumber: row.pic_number || "",
@@ -45,7 +48,7 @@ const mapDBRequestToFrontend = (
     requestorEmail: row.requestor_email,
     status: row.status,
     items: (row.request_items || []).map((item: any) => ({
-      id: item.id, // CRITICAL: This is the real UUID
+      id: item.id,
       prNumber: row.pr_number,
       itemCode: item.master_items?.code || "UNKNOWN",
       itemName:
@@ -56,12 +59,12 @@ const mapDBRequestToFrontend = (
       uom: item.uom,
       region: region,
       itemStatus: item.item_status || "Not Set",
-      status: item.status, // This ensures item level status is preserved
+      status: item.status,
       vendorName: item.vendors?.name,
       vendorCode: item.vendors?.code,
       paymentTerms: item.payment_terms,
       unitPrice: item.unit_price,
-      taxPercentage: item.tax_percentage || 11,
+      taxPercentage: item.tax_percentage || 0, // Used as WHT for PO items
       totalPrice: item.total_price,
       poNumber: item.po_number,
       poDate: item.po_date,
@@ -103,7 +106,6 @@ export const procurementRequestsAPI = {
     return data.map(mapDBRequestToFrontend);
   },
 
-  // UPDATED SAVE FUNCTION FOR FULL SYNCHRONIZATION
   save: async (
     request: ProcurementRequest,
   ): Promise<ProcurementRequest> => {
@@ -137,23 +139,17 @@ export const procurementRequestsAPI = {
     const prId = prData.id;
 
     // 2. Upsert Items
-    // Map items to DB structure
     const itemsToUpsert = request.items.map((item) => ({
-      // If ID is a temp ID (e.g. "1-1") or missing, set to undefined to let DB generate UUID
-      // If it is a UUID (length > 30), keep it.
       id: item.id && item.id.length > 30 ? item.id : undefined,
       request_id: prId,
-      // We need master_item_id. Ideally, look this up or assume frontend sends it.
-      // For now, we rely on itemCode mapping if possible, or keep existing.
-      // NOTE: Real implementation requires fetching master_item_id based on itemCode if not present
       item_name_snapshot: item.itemName,
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
       uom: item.uom,
-      // payment_terms, etc...
       unit_price: item.unitPrice,
       total_price: item.totalPrice,
+      tax_percentage: item.taxPercentage, // Persist WHT if set
       po_number: item.poNumber,
       po_date: item.poDate ? new Date(item.poDate) : null,
       estimated_delivery_start: item.estimatedDeliveryStart,
@@ -161,17 +157,14 @@ export const procurementRequestsAPI = {
     }));
 
     if (itemsToUpsert.length > 0) {
-      // We upsert and SELECT the new IDs to return to frontend
       const { error: itemsError } = await supabase
         .from("request_items")
-        .upsert(itemsToUpsert, { onConflict: "id" }); // Assuming ID is the conflict key
+        .upsert(itemsToUpsert, { onConflict: "id" });
 
       if (itemsError)
         console.error("Error saving items:", itemsError);
     }
 
-    // 3. FETCH FRESH DATA to ensure Frontend has real UUIDs
-    // This solves the issue of status updates failing on subsequent tries
     const { data: freshData, error: refreshError } =
       await supabase
         .from("procurement_requests")
@@ -190,8 +183,6 @@ export const procurementRequestsAPI = {
         .single();
 
     if (refreshError) throw refreshError;
-
-    // Return the fresh object from DB
     return mapDBRequestToFrontend(freshData);
   },
 
@@ -246,9 +237,7 @@ export const vendorsAPI = {
       paymentMethods: v.payment_methods,
       isActive: v.is_active,
       vendorAgreementLink: v.agreement_link,
-      // New Field Mapping
       propertyType: v.property_type || "All",
-      // Ensure agreements handle the new link field
       agreements: Array.isArray(v.agreements)
         ? v.agreements
         : [],
@@ -259,7 +248,10 @@ export const vendorsAPI = {
         unitPrice: vi.unit_price,
         minQuantity: vi.min_quantity,
         agreementNumber: vi.agreement_number,
-        taxPercentage: 11, // Default or derived
+        // Map DB wht_percentage to frontend taxPercentage/whtPercentage
+        // Note: The prompt asked to store WHT. We map it here.
+        // Assuming column 'wht_percentage' exists in vendor_catalog_items or we treat 'tax_percentage' as WHT
+        taxPercentage: vi.wht_percentage || 0,
       })),
     }));
   },
@@ -285,9 +277,8 @@ export const vendorsAPI = {
               vendor.serviceChargePercentage,
             is_active: vendor.isActive,
             agreement_link: vendor.vendorAgreementLink,
-            // New Fields to Save
             property_type: vendor.propertyType,
-            agreements: vendor.agreements, // Now includes link/documentLink
+            agreements: vendor.agreements,
           },
           { onConflict: "code" },
         )
@@ -295,10 +286,9 @@ export const vendorsAPI = {
         .single();
 
     if (vendorError) throw vendorError;
-
     const vendorId = vendorData.id;
 
-    // 2. Save Vendor Catalog Items (Existing Logic maintained)
+    // 2. Save Vendor Catalog Items
     if (vendor.items && vendor.items.length > 0) {
       const itemCodes = vendor.items.map(
         (i: any) => i.itemCode,
@@ -310,7 +300,6 @@ export const vendorsAPI = {
           .in("code", itemCodes);
 
       if (masterError) throw masterError;
-
       const itemMap = new Map(
         masterItems?.map((i) => [i.code, i.id]),
       );
@@ -319,7 +308,6 @@ export const vendorsAPI = {
         .map((vItem: any) => {
           const itemId = itemMap.get(vItem.itemCode);
           if (!itemId) return null;
-
           return {
             vendor_id: vendorId,
             item_id: itemId,
@@ -327,22 +315,20 @@ export const vendorsAPI = {
             unit_price: vItem.unitPrice,
             min_quantity: vItem.minQuantity,
             agreement_number: vItem.agreementNumber,
+            // Requirement 2: Store WHT% in database
+            wht_percentage: vItem.taxPercentage, // Map frontend taxPercentage to DB wht_percentage
           };
         })
         .filter((i: any) => i !== null);
 
-      const { error: deleteError } = await supabase
+      await supabase
         .from("vendor_catalog_items")
         .delete()
         .eq("vendor_id", vendorId);
-
-      if (deleteError) throw deleteError;
-
       if (catalogItems.length > 0) {
         const { error: insertError } = await supabase
           .from("vendor_catalog_items")
           .insert(catalogItems);
-
         if (insertError) throw insertError;
       }
     } else {
@@ -351,7 +337,6 @@ export const vendorsAPI = {
         .delete()
         .eq("vendor_id", vendorId);
     }
-
     return vendor;
   },
 
@@ -665,7 +650,7 @@ export const initializeDatabase = async (data: {
 };
 
 // ========================================
-// PURCHASE ORDERS API (NEW)
+// PURCHASE ORDERS API
 // ========================================
 export const purchaseOrdersAPI = {
   getAll: async (): Promise<PurchaseOrder[]> => {
@@ -674,7 +659,7 @@ export const purchaseOrdersAPI = {
       .select(
         `
         *,
-        vendor:vendors(name),
+        vendor:vendors(name, email, address, contact_person),
         items:request_items(
           *,
           master_items(name, code)
@@ -691,13 +676,15 @@ export const purchaseOrdersAPI = {
       generatedDate: po.generated_date,
       vendorId: po.vendor_id,
       vendorName: po.vendor?.name || "Unknown",
+      // Requirement 3: Use these for Email logic
+      vendorEmail: po.vendor?.email,
       status: po.status,
       approvalStatus: po.approval_status,
       signedPoLink: po.signed_po_link,
       totalAmount: po.total_amount,
       items: (po.items || []).map((i: any) => ({
         id: i.id,
-        prNumber: "PR-LINKED", // Can be derived if needed
+        prNumber: "PR-LINKED",
         itemName: i.master_items?.name || i.item_name_snapshot,
         quantity: i.quantity,
         uom: i.uom,
@@ -707,16 +694,23 @@ export const purchaseOrdersAPI = {
       })),
       prNumbers: Array.from(
         new Set((po.items || []).map((i: any) => i.request_id)),
-      ), // Ideally fetch PR Number string
+      ),
     }));
   },
 
-  // Requirement 1: Create PO and set Item Status to "Waiting PO Approval"
-  create: async (
-    poData: Partial<PurchaseOrder>,
-    itemIds: string[],
-  ): Promise<void> => {
-    // 1. Create Purchase Order Header
+  // Updated to handle partial items (Ready status only)
+  create: async (poData: {
+    poNumber: string;
+    vendorId: string;
+    generatedDate: string;
+    totalAmount: number;
+    items: Array<{
+      id: string;
+      whtPercentage: number;
+      eta: string;
+    }>;
+  }): Promise<void> => {
+    // 1. Create PO Header
     const { data: newPO, error: poError } = await supabase
       .from("purchase_orders")
       .insert({
@@ -732,18 +726,46 @@ export const purchaseOrdersAPI = {
 
     if (poError) throw poError;
 
-    // 2. Link Items to PO and Update Status
-    const { error: itemError } = await supabase
+    // 2. Link "Ready" Items to PO and Update Item-Level Data (WHT, ETA)
+    // We do this concurrently for all items in the PO
+    const updates = poData.items.map((item) =>
+      supabase
+        .from("request_items")
+        .update({
+          purchase_order_id: newPO.id,
+          po_number: poData.poNumber,
+          po_date: poData.generatedDate,
+          status: "Waiting PO Approval",
+          tax_percentage: item.whtPercentage, // Saving WHT to request_items
+          estimated_delivery_start: item.eta
+            ? new Date(item.eta)
+            : null, // Saving ETA
+        })
+        .eq("id", item.id),
+    );
+
+    await Promise.all(updates);
+  },
+
+  delete: async (poId: string): Promise<void> => {
+    const { error: updateError } = await supabase
       .from("request_items")
       .update({
-        purchase_order_id: newPO.id,
-        po_number: poData.poNumber,
-        po_date: poData.generatedDate,
-        status: "Waiting PO Approval", // <--- Requirement 1 Implemented
+        status: "Waiting PO",
+        purchase_order_id: null,
+        po_number: null,
+        po_date: null,
       })
-      .in("id", itemIds);
+      .eq("purchase_order_id", poId);
 
-    if (itemError) throw itemError;
+    if (updateError) throw updateError;
+
+    const { error: deleteError } = await supabase
+      .from("purchase_orders")
+      .delete()
+      .eq("id", poId);
+
+    if (deleteError) throw deleteError;
   },
 
   uploadSignedPO: async (
@@ -757,14 +779,12 @@ export const purchaseOrdersAPI = {
         approval_status: "Approved",
       })
       .eq("id", poId);
-
     if (error) throw error;
   },
 
   markAsProcessByVendor: async (
     poId: string,
   ): Promise<void> => {
-    // 1. Get all items
     const { data: items } = await supabase
       .from("request_items")
       .select("id, request_id")
@@ -773,50 +793,11 @@ export const purchaseOrdersAPI = {
     if (!items || items.length === 0) return;
     const itemIds = items.map((i) => i.id);
 
-    // 2. Update Items Status
     const { error } = await supabase
       .from("request_items")
       .update({ status: "Process by Vendor" })
       .in("id", itemIds);
 
     if (error) throw error;
-
-    // 3. AUTO-CLOSE PR CHECK (Revamp Req 1)
-    // Check each related PR: Close if ALL items are >= 'Process by Vendor'
-    for (const reqId of requestIds) {
-      await checkAndClosePR(reqId);
-    }
   },
-};
-
-// Helper: Check PR Status and Close if applicable
-const checkAndClosePR = async (requestId: string) => {
-  // Fetch all items for this PR
-  const { data: allItems } = await supabase
-    .from("request_items")
-    .select("status")
-    .eq("request_id", requestId);
-
-  if (!allItems) return;
-
-  // Logic: If EVERY item is in a "Progress" state or "Closed"
-  // The requirement says: "status = Process by Vendor"
-  // We assume "Delivered" and "Closed" also count as satisfying the condition to close the PR.
-  const validStatuses = [
-    "Process by Vendor",
-    "Delivered",
-    "Closed",
-    "Cancelled by Procurement",
-  ];
-
-  const allProcessed = allItems.every((item) =>
-    validStatuses.includes(item.status),
-  );
-
-  if (allProcessed) {
-    await supabase
-      .from("procurement_requests")
-      .update({ status: "Close" })
-      .eq("id", requestId);
-  }
 };

@@ -5,16 +5,19 @@ import {
   Search,
   Download,
   Eye,
-  ExternalLink,
   Trash2,
   Upload,
   MessageCircle,
 } from "lucide-react";
-import { purchaseOrdersAPI } from "../utils/api";
+import {
+  purchaseOrdersAPI,
+  procurementRequestsAPI,
+} from "../utils/api"; // Added procurementRequestsAPI import if needed for deep refresh, though mostly handled by props
 import type { PurchaseOrder } from "../data/mockData";
 import UploadSignedPOModal from "./modals/UploadSignedPOModal";
 import POPreviewModal from "./modals/POPreviewModal";
 import ConfirmationModal from "./configuration/ConfirmationModal";
+import Toast from "./Toast"; // Assuming you want Toast feedback
 
 interface ListPOProps {
   onRequestsUpdate?: () => void;
@@ -34,6 +37,10 @@ export default function ListPO({
   const [vendorFilter, setVendorFilter] =
     useState<string>("all");
   const [sortBy, setSortBy] = useState<string>("newest");
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
 
   // Action State
   const [selectedPOForUpload, setSelectedPOForUpload] =
@@ -53,6 +60,10 @@ export default function ListPO({
       setPos(data);
     } catch (error) {
       console.error("Error loading POs:", error);
+      setToast({
+        message: "Failed to load Purchase Orders",
+        type: "error",
+      });
     } finally {
       setIsLoading(false);
     }
@@ -123,37 +134,71 @@ export default function ListPO({
 
   // 4. Action Handlers
   const handleContactVendor = async (po: PurchaseOrder) => {
-    // A. Open WhatsApp
-    const message = `Hello ${po.vendorName}, attached is the Signed PO ${po.poNumber}. Please process immediately.`;
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(message)}`,
-      "_blank",
-    );
+    // Requirement 3: Redirect to Email
+    if (!po.vendorEmail) {
+      alert("No email address found for this vendor.");
+      return;
+    }
 
-    // B. Trigger Status Update
+    const subject = `Purchase Order ${po.poNumber} - ${po.vendorName}`;
+    const body = `Dear ${po.vendorName},\n\nPlease find attached the signed Purchase Order ${po.poNumber}.\n\nBest regards,\nProcurement Team`;
+
+    // Open Mail Client
+    window.location.href = `mailto:${po.vendorEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+    // Trigger Status Update (Same logic as before)
     try {
       await purchaseOrdersAPI.markAsProcessByVendor(po.id);
       await loadPOs();
-      if (onRequestsUpdate) onRequestsUpdate();
-      alert(
-        `Success: Items in PO ${po.poNumber} marked as "Process by Vendor".`,
-      );
+      if (onRequestsUpdate) {
+        const freshRequests = await import("../utils/api").then(
+          (m) => m.procurementRequestsAPI.getAll(),
+        );
+        onRequestsUpdate(freshRequests);
+      }
     } catch (error) {
       console.error("Error updating status:", error);
-      alert("Failed to update status.");
     }
   };
 
   const handleDeletePO = async () => {
     if (!deleteConfirm) return;
-    // Implement delete logic here if needed
-    console.log(
-      "Delete requested for:",
-      deleteConfirm.poNumber,
-    );
-    setDeleteConfirm(null);
+
+    try {
+      // 1. Call API to Delete PO and Revert Item Statuses
+      await purchaseOrdersAPI.delete(deleteConfirm.poId);
+
+      // 2. Remove from Local List immediately for UI responsiveness
+      setPos((prev) =>
+        prev.filter((p) => p.id !== deleteConfirm.poId),
+      );
+
+      // 3. Trigger Global Update
+      // This is crucial: The "List PR" and "Dashboard" need to know that items
+      // are back to "Waiting PO" so they reappear in the Generate PO list.
+      if (onRequestsUpdate) {
+        const freshRequests = await import("../utils/api").then(
+          (m) => m.procurementRequestsAPI.getAll(),
+        );
+        onRequestsUpdate(freshRequests);
+      }
+
+      setToast({
+        message: `PO ${deleteConfirm.poNumber} deleted. Items reverted to "Waiting PO".`,
+        type: "success",
+      });
+    } catch (error) {
+      console.error("Failed to delete PO:", error);
+      setToast({
+        message: "Failed to delete PO. Please try again.",
+        type: "error",
+      });
+    } finally {
+      setDeleteConfirm(null);
+    }
   };
 
+  // ... (formatDate, formatCurrency, getApprovalBadge helpers remain unchanged)
   const formatDate = (date?: string) => {
     if (!date) return "-";
     return new Date(date).toLocaleDateString("en-GB", {
