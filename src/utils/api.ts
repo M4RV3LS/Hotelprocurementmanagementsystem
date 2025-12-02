@@ -17,19 +17,12 @@ const supabase = createClient(supabaseUrl, publicAnonKey);
 // 1. Helper to determine region
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
-
   const address = (row.property_address || "").toLowerCase();
   if (address.includes("jakarta")) return "DKI Jakarta";
   if (address.includes("bali")) return "Bali";
-  if (address.includes("bandung")) return "Jawa Barat";
-  if (address.includes("surabaya")) return "Jawa Timur";
-  if (address.includes("yogya"))
-    return "Daerah Istimewa Yogyakarta";
-  if (address.includes("medan")) return "Sumatera Utara";
   return "DKI Jakarta";
 };
 
-// 2. Updated Mapper
 const mapDBRequestToFrontend = (
   row: any,
 ): ProcurementRequest => {
@@ -64,7 +57,8 @@ const mapDBRequestToFrontend = (
       vendorCode: item.vendors?.code,
       paymentTerms: item.payment_terms,
       unitPrice: item.unit_price,
-      taxPercentage: item.tax_percentage || 0, // Used as WHT for PO items
+      // Map WHT/Tax if stored on item level, otherwise default
+      taxPercentage: item.tax_percentage || 0,
       totalPrice: item.total_price,
       poNumber: item.po_number,
       poDate: item.po_date,
@@ -109,6 +103,7 @@ export const procurementRequestsAPI = {
   save: async (
     request: ProcurementRequest,
   ): Promise<ProcurementRequest> => {
+    // ... (No changes needed here for this task, keeping existing logic)
     const derivedRegion =
       request.items[0]?.region || "DKI Jakarta";
 
@@ -149,7 +144,7 @@ export const procurementRequestsAPI = {
       uom: item.uom,
       unit_price: item.unitPrice,
       total_price: item.totalPrice,
-      tax_percentage: item.taxPercentage, // Persist WHT if set
+      tax_percentage: item.taxPercentage,
       po_number: item.poNumber,
       po_date: item.poDate ? new Date(item.poDate) : null,
       estimated_delivery_start: item.estimatedDeliveryStart,
@@ -224,6 +219,8 @@ export const vendorsAPI = {
     if (error) throw error;
 
     return data.map((v) => ({
+      // CRITICAL FIX 4b: Ensure 'id' is mapped so PO creation links correctly
+      id: v.id,
       vendorCode: v.code,
       vendorName: v.name,
       vendorRegion: v.region,
@@ -248,9 +245,7 @@ export const vendorsAPI = {
         unitPrice: vi.unit_price,
         minQuantity: vi.min_quantity,
         agreementNumber: vi.agreement_number,
-        // Map DB wht_percentage to frontend taxPercentage/whtPercentage
-        // Note: The prompt asked to store WHT. We map it here.
-        // Assuming column 'wht_percentage' exists in vendor_catalog_items or we treat 'tax_percentage' as WHT
+        // FIX 2: Map DB 'wht_percentage' to frontend 'taxPercentage'
         taxPercentage: vi.wht_percentage || 0,
       })),
     }));
@@ -315,16 +310,18 @@ export const vendorsAPI = {
             unit_price: vItem.unitPrice,
             min_quantity: vItem.minQuantity,
             agreement_number: vItem.agreementNumber,
-            // Requirement 2: Store WHT% in database
-            wht_percentage: vItem.taxPercentage, // Map frontend taxPercentage to DB wht_percentage
+            // FIX 2: Save WHT percentage to DB
+            wht_percentage: vItem.taxPercentage,
           };
         })
         .filter((i: any) => i !== null);
 
+      // Clean replace strategy
       await supabase
         .from("vendor_catalog_items")
         .delete()
         .eq("vendor_id", vendorId);
+
       if (catalogItems.length > 0) {
         const { error: insertError } = await supabase
           .from("vendor_catalog_items")
@@ -337,7 +334,7 @@ export const vendorsAPI = {
         .delete()
         .eq("vendor_id", vendorId);
     }
-    return vendor;
+    return { ...vendor, id: vendorId };
   },
 
   delete: async (vendorCode: string): Promise<void> => {
@@ -359,18 +356,15 @@ export const itemsAPI = {
       .from("master_items")
       .select("*");
     if (error) throw error;
-
     return data.map((i) => ({
       itemCode: i.code,
       itemName: i.name,
       brandName: i.brand_name,
       itemCategory: i.category,
       uom: i.uom,
-      properties: [],
       isActive: i.is_active,
     }));
   },
-
   save: async (item: any): Promise<any> => {
     const { data, error } = await supabase
       .from("master_items")
@@ -387,11 +381,9 @@ export const itemsAPI = {
       )
       .select()
       .single();
-
     if (error) throw error;
     return item;
   },
-
   delete: async (itemCode: string): Promise<void> => {
     const { error } = await supabase
       .from("master_items")
@@ -411,20 +403,15 @@ export const paymentMethodsAPI = {
       .from("payment_methods")
       .select("*")
       .order("name");
-
-    if (error) {
-      return [];
-    }
-
+    if (error) return [];
     return data.map((pm) => ({
       id: pm.id,
       name: pm.name,
       isActive: pm.is_active,
     }));
   },
-
   save: async (paymentMethods: any[]): Promise<any[]> => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("payment_methods")
       .upsert(
         paymentMethods.map((pm) => ({
@@ -432,9 +419,7 @@ export const paymentMethodsAPI = {
           is_active: pm.isActive,
         })),
         { onConflict: "name" },
-      )
-      .select();
-
+      );
     if (error) throw error;
     return paymentMethods;
   },
@@ -676,7 +661,6 @@ export const purchaseOrdersAPI = {
       generatedDate: po.generated_date,
       vendorId: po.vendor_id,
       vendorName: po.vendor?.name || "Unknown",
-      // Requirement 3: Use these for Email logic
       vendorEmail: po.vendor?.email,
       status: po.status,
       approvalStatus: po.approval_status,
@@ -698,7 +682,6 @@ export const purchaseOrdersAPI = {
     }));
   },
 
-  // Updated to handle partial items (Ready status only)
   create: async (poData: {
     poNumber: string;
     vendorId: string;
@@ -715,7 +698,7 @@ export const purchaseOrdersAPI = {
       .from("purchase_orders")
       .insert({
         po_number: poData.poNumber,
-        vendor_id: poData.vendorId,
+        vendor_id: poData.vendorId, // Fix 4b: Ensure this isn't undefined
         generated_date: poData.generatedDate,
         total_amount: poData.totalAmount,
         status: "Open",
@@ -726,8 +709,12 @@ export const purchaseOrdersAPI = {
 
     if (poError) throw poError;
 
-    // 2. Link "Ready" Items to PO and Update Item-Level Data (WHT, ETA)
-    // We do this concurrently for all items in the PO
+    // 2. Link "Ready" Items to PO and Update Item-Level Data
+    // Fix 4a: We explicitly update status to 'Waiting PO Approval'
+    const itemIds = poData.items.map((i) => i.id);
+
+    // Bulk update approach for performance, assuming ETA and WHT are per-item but we can batch if identical
+    // However, since WHT might differ, we map.
     const updates = poData.items.map((item) =>
       supabase
         .from("request_items")
@@ -735,16 +722,21 @@ export const purchaseOrdersAPI = {
           purchase_order_id: newPO.id,
           po_number: poData.poNumber,
           po_date: poData.generatedDate,
-          status: "Waiting PO Approval",
-          tax_percentage: item.whtPercentage, // Saving WHT to request_items
+          status: "Waiting PO Approval", // This updates the column in DB
+          tax_percentage: item.whtPercentage,
           estimated_delivery_start: item.eta
             ? new Date(item.eta)
-            : null, // Saving ETA
+            : null,
         })
         .eq("id", item.id),
     );
 
-    await Promise.all(updates);
+    const results = await Promise.all(updates);
+    const errors = results.filter((r) => r.error);
+    if (errors.length > 0) {
+      console.error("Errors updating items:", errors);
+      throw new Error("Failed to update some items.");
+    }
   },
 
   delete: async (poId: string): Promise<void> => {

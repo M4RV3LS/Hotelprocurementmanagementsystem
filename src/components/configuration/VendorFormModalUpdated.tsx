@@ -10,7 +10,6 @@ import type { Vendor } from "./VendorManagement";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import { INDONESIA_REGIONS } from "../../data/mockData";
 
-// Updated Vendor Interface to include Property Type
 interface ExtendedVendor extends Omit<Vendor, "agreements"> {
   propertyType: "Franchise" | "Leasing" | "All";
   agreements: Agreement[];
@@ -32,18 +31,17 @@ interface VendorItem {
   priceType: "Fixed" | "Not Fixed";
   unitPrice: number;
   agreementNumber: string;
-  taxPercentage: number;
+  taxPercentage: number; // Used for WHT
 }
 
-// Updated Agreement Interface to include Link
 interface Agreement {
   id: string;
   type: "Agreement" | "Offering";
   number: string;
   startDate: string;
   endDate: string;
-  documentLink?: string; // Kept for backward compatibility
-  link: string; // New field as requested
+  documentLink?: string;
+  link: string;
 }
 
 export default function VendorFormModalUpdated({
@@ -69,7 +67,7 @@ export default function VendorFormModalUpdated({
       agreements: [],
       items: [],
       isActive: true,
-      propertyType: "All", // Default value
+      propertyType: "All",
     },
   );
 
@@ -95,11 +93,10 @@ export default function VendorFormModalUpdated({
     priceType: "Fixed",
     unitPrice: 0,
     agreementNumber: "",
-    taxPercentage: 11,
+    taxPercentage: 0, // Default WHT
   });
 
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-
   const activeItems = items.filter((item) => item.isActive);
 
   const handleInputChange = (
@@ -122,22 +119,17 @@ export default function VendorFormModalUpdated({
         priceType: "Fixed",
         unitPrice: 0,
         agreementNumber: "",
-        taxPercentage: formData.ppnPercentage,
+        taxPercentage: 0,
       });
     }
   };
 
   const handleAddItemToVendor = () => {
-    if (
-      !newItem.itemCode ||
-      newItem.minQuantity <= 0 ||
-      newItem.taxPercentage < 0
-    ) {
+    if (!newItem.itemCode || newItem.minQuantity <= 0) {
       alert("Please fill in all required fields");
       return;
     }
 
-    // STRICT VALIDATION: Fixed Price MUST have Agreement
     if (newItem.priceType === "Fixed") {
       if (newItem.unitPrice <= 0) {
         alert("Unit price is required for fixed price items");
@@ -170,7 +162,7 @@ export default function VendorFormModalUpdated({
       priceType: "Fixed",
       unitPrice: 0,
       agreementNumber: "",
-      taxPercentage: formData.ppnPercentage,
+      taxPercentage: 0,
     });
     setShowAddItem(false);
   };
@@ -194,7 +186,7 @@ export default function VendorFormModalUpdated({
       number: "",
       startDate: "",
       endDate: "",
-      link: "", // Init empty
+      link: "",
       documentLink: "",
     };
     setAgreements([...agreements, newAgreement]);
@@ -223,12 +215,10 @@ export default function VendorFormModalUpdated({
       alert("Please fill in vendor code and name");
       return;
     }
-
     if (selectedRegions.length === 0) {
       alert("Please select at least one region");
       return;
     }
-
     if (selectedPaymentMethods.length === 0) {
       alert("Please select at least one payment method");
       return;
@@ -268,7 +258,6 @@ export default function VendorFormModalUpdated({
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-          {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
             <h2 className="text-gray-900">
               {vendor ? "Edit Vendor" : "Add New Vendor"}
@@ -325,7 +314,7 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                     placeholder="VND001"
                   />
                 </div>
@@ -343,7 +332,7 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                     placeholder="PT Example Company"
                   />
                 </div>
@@ -369,7 +358,7 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                     placeholder="contact@vendor.com"
                   />
                 </div>
@@ -385,7 +374,7 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                     rows={2}
                     placeholder="Full address"
                   />
@@ -403,14 +392,13 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                     placeholder="+62 21 1234 5678"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Tax Configuration */}
             <div className="border-t border-gray-200 pt-6">
               <h3 className="text-gray-900 mb-4">
                 Tax Configuration
@@ -431,8 +419,7 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                    placeholder="11"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
                 <div>
@@ -449,8 +436,7 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                    placeholder="0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
                 <div>
@@ -467,15 +453,14 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                    placeholder="0"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Agreements Section (Requirement #1) */}
             <div className="border-t border-gray-200 pt-6">
+              {/* ... Agreement Section (Keep existing code) ... */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900">
                   Agreement / Offering Information
@@ -522,11 +507,9 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                       />
                     </div>
-
-                    {/* Requirement #1: Radio Button for Type */}
                     <div>
                       <label className="block text-gray-700 mb-2">
                         Type{" "}
@@ -575,8 +558,6 @@ export default function VendorFormModalUpdated({
                         </label>
                       </div>
                     </div>
-
-                    {/* Start/End Dates */}
                     <div>
                       <label className="block text-gray-700 mb-2">
                         Start Date
@@ -591,7 +572,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                       />
                     </div>
                     <div>
@@ -608,11 +589,9 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                       />
                     </div>
-
-                    {/* Requirement #1: Link Input */}
                     <div className="col-span-2">
                       <label className="block text-gray-700 mb-2">
                         Document Link{" "}
@@ -631,7 +610,7 @@ export default function VendorFormModalUpdated({
                             )
                           }
                           placeholder="https://drive.google.com/..."
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg"
                         />
                       </div>
                     </div>
@@ -640,7 +619,6 @@ export default function VendorFormModalUpdated({
               ))}
             </div>
 
-            {/* Payment Methods */}
             <div className="border-t border-gray-200 pt-6">
               <MultiSelectDropdown
                 options={activePaymentMethods}
@@ -656,7 +634,7 @@ export default function VendorFormModalUpdated({
               />
             </div>
 
-            {/* Vendor Item/SKU Configuration */}
+            {/* Vendor Item/SKU Configuration - UPDATED */}
             <div className="border-t border-gray-200 pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900">
@@ -681,7 +659,7 @@ export default function VendorFormModalUpdated({
                 </div>
               </div>
 
-              {/* Items Table */}
+              {/* Items Table - Requirement 3: Add WHT Column */}
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full">
                   <thead className="bg-gray-50">
@@ -698,6 +676,10 @@ export default function VendorFormModalUpdated({
                       <th className="px-4 py-3 text-left text-gray-700">
                         Agreement
                       </th>
+                      <th className="px-4 py-3 text-left text-gray-700">
+                        WHT (%)
+                      </th>{" "}
+                      {/* Added */}
                       <th className="px-4 py-3 text-right text-gray-700">
                         Action
                       </th>
@@ -734,6 +716,10 @@ export default function VendorFormModalUpdated({
                             </span>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-gray-700">
+                          {item.taxPercentage}%
+                        </td>{" "}
+                        {/* Value displayed */}
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() =>
@@ -760,7 +746,6 @@ export default function VendorFormModalUpdated({
             </div>
           </div>
 
-          {/* Footer */}
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
             <button
               onClick={onClose}
@@ -795,7 +780,6 @@ export default function VendorFormModalUpdated({
                 </h3>
               </div>
               <div className="px-6 py-6 space-y-4">
-                {/* Item Selection */}
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Choose Item{" "}
@@ -820,8 +804,6 @@ export default function VendorFormModalUpdated({
                     ))}
                   </select>
                 </div>
-
-                {/* Min Qty */}
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Minimum Quantity{" "}
@@ -841,8 +823,6 @@ export default function VendorFormModalUpdated({
                     min="1"
                   />
                 </div>
-
-                {/* Price Type */}
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Price Type{" "}
@@ -883,8 +863,6 @@ export default function VendorFormModalUpdated({
                     </label>
                   </div>
                 </div>
-
-                {/* Fixed Price Fields */}
                 {newItem.priceType === "Fixed" && (
                   <>
                     <div>
@@ -918,12 +896,7 @@ export default function VendorFormModalUpdated({
                             agreementNumber: e.target.value,
                           })
                         }
-                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] ${
-                          !newItem.agreementNumber &&
-                          agreements.length > 0
-                            ? "border-red-300 bg-red-50"
-                            : "border-gray-300"
-                        }`}
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] ${!newItem.agreementNumber && agreements.length > 0 ? "border-red-300 bg-red-50" : "border-gray-300"}`}
                       >
                         <option value="">
                           Select Agreement
@@ -946,8 +919,6 @@ export default function VendorFormModalUpdated({
                     </div>
                   </>
                 )}
-
-                {/* WHT */}
                 <div>
                   <label className="block text-gray-700 mb-2">
                     WHT (%){" "}

@@ -16,37 +16,29 @@ interface GeneratePOModalProps {
 interface POData {
   poNumber: string;
   poDate: string;
-  etaStart: string;
-  etaEnd: string;
+  eta: string;
   paymentTerms: string;
   vendorName: string;
   vendorAddress: string;
   vendorPIC: string;
   ppnPercentage: number;
-  serviceChargePercentage: number;
-  pb1Percentage: number;
-  whtPercentage: number;
   items: Array<{
     prNumber: string;
-    brand: string;
     itemName: string;
     quantity: number;
     uom: string;
     unitPrice: number;
     whtPercentage: number;
     pic: string;
-    propertyCode: string;
-    propertyName: string;
-    propertyAddress: string;
-    itemStatus: "Not Set" | "Ready" | "Cancelled";
     region: string;
-    item: ProcurementItem; // Reference to original item
+    item: ProcurementItem;
+    status: "Ready" | "Not Ready";
   }>;
 }
 
 type StepType = "selection" | "preview";
 
-export default function GeneratePOModal({
+export default function GeneratePOModalUpdated({
   onClose,
   onGenerate,
   vendors,
@@ -65,11 +57,6 @@ export default function GeneratePOModal({
   // Preview state
   const [poData, setPOData] = useState<POData | null>(null);
 
-  // -------------------------------------------------------------------------
-  // CORE LOGIC: Get Items based on ITEM Status only
-  // Requirement: Filter request_items status = "Waiting PO"
-  // Requirement: Do NOT look at procurement_requests.status
-  // -------------------------------------------------------------------------
   const getAvailableItems = () => {
     const items: Array<{
       request: ProcurementRequest;
@@ -90,7 +77,6 @@ export default function GeneratePOModal({
     return items;
   };
 
-  // Get unique vendors from available items
   const getAvailableVendors = () => {
     const availableItems = getAvailableItems();
     const uniqueVendors = new Set(
@@ -161,24 +147,22 @@ export default function GeneratePOModal({
       (v) => v.vendorName === selectedVendor,
     );
 
-    // Requirement 2: Fetch WHT from Vendor Mapping
-    // Note: In vendorsAPI.getAll we mapped DB `wht_percentage` to `item.taxPercentage`
     const getItemWHT = (itemCode: string) => {
       const vendorItem = vendor?.items?.find(
         (vi: any) => vi.itemCode === itemCode,
       );
-      return vendorItem?.taxPercentage || 0; // Default to 0 if not found
+      return vendorItem?.taxPercentage || 0;
     };
 
     const compiledPOData: POData = {
       poNumber,
       poDate,
-      eta: "", // Init empty
-      paymentTerms: selectedPaymentTerms, // Requirement 1d
+      eta: "",
+      paymentTerms: selectedPaymentTerms,
       vendorName: selectedVendor,
-      vendorAddress: vendor?.vendorAddress || "-", // Requirement 1b
+      vendorAddress: vendor?.vendorAddress || "-",
       vendorPIC:
-        vendor?.picName || vendor?.contact_person || "-", // Requirement 1c
+        vendor?.picName || vendor?.contact_person || "-",
       ppnPercentage: vendor?.ppnPercentage || 11,
       items: matchingItems.map(({ request, item }) => ({
         prNumber: request.prNumber,
@@ -186,12 +170,11 @@ export default function GeneratePOModal({
         quantity: item.quantity,
         uom: item.uom,
         unitPrice: item.unitPrice || 0,
-        // Requirement 1 Item List a: WHT auto-filled from config
         whtPercentage: getItemWHT(item.itemCode),
         pic: request.picName,
         region: item.region,
         item: item,
-        status: "Not Ready", // Requirement 1 Item List b: Default status
+        status: "Not Ready",
       })),
     };
 
@@ -202,7 +185,6 @@ export default function GeneratePOModal({
   const handleExportPO = () => {
     if (!poData) return;
 
-    // Filter only "Ready" items (Requirement 1 Item List b)
     const readyItems = poData.items.filter(
       (i) => i.status === "Ready",
     );
@@ -220,12 +202,18 @@ export default function GeneratePOModal({
     }
 
     import("../utils/api").then(({ purchaseOrdersAPI }) => {
-      // Find vendor ID
+      // FIX 4b: Properly retrieve the Vendor ID for linking
       const vendorId = vendors.find(
         (v) => v.vendorName === selectedVendor,
       )?.id;
 
-      // Prepare payload with item-specific updates (WHT, ETA)
+      if (!vendorId) {
+        alert(
+          "System Error: Vendor ID not found. Please refresh vendor data.",
+        );
+        return;
+      }
+
       const poPayload = {
         poNumber: poData.poNumber,
         vendorId: vendorId,
@@ -257,10 +245,6 @@ export default function GeneratePOModal({
     });
   };
 
-  const availableVendors = getAvailableVendors();
-  const availableRegions = getAvailableRegions();
-  const availablePaymentTerms = getAvailablePaymentTerms();
-
   return (
     <>
       <div
@@ -269,7 +253,6 @@ export default function GeneratePOModal({
       />
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-y-auto">
-          {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
             <h2 className="text-gray-900">
               Generate Purchase Order
@@ -284,7 +267,6 @@ export default function GeneratePOModal({
 
           <div className="px-8 py-6">
             {step === "selection" ? (
-              // ... (Same Selection UI as before) ...
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-blue-900 text-sm">
@@ -379,9 +361,7 @@ export default function GeneratePOModal({
                 </div>
               </div>
             ) : (
-              /* PREVIEW STEP */
               <div className="space-y-6">
-                {/* PO Header Info - UPDATED */}
                 <div className="bg-gray-50 rounded-lg p-6">
                   <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
                     PO Header Details
@@ -432,20 +412,12 @@ export default function GeneratePOModal({
                         <span className="text-sm text-gray-500 block mb-1">
                           PO Date
                         </span>
+                        {/* Requirement 1: Non-editable PO Date */}
                         <input
                           type="date"
                           value={poData?.poDate}
-                          onChange={(e) =>
-                            setPOData(
-                              poData
-                                ? {
-                                    ...poData,
-                                    poDate: e.target.value,
-                                  }
-                                : null,
-                            )
-                          }
-                          className="border border-gray-300 rounded px-2 py-1 text-sm w-full"
+                          disabled
+                          className="border border-gray-300 rounded px-2 py-1 text-sm w-full bg-gray-100 cursor-not-allowed"
                         />
                       </div>
                       <div>
@@ -476,7 +448,6 @@ export default function GeneratePOModal({
                   </div>
                 </div>
 
-                {/* Table - UPDATED */}
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                   <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-gray-700 font-medium border-b">
@@ -527,7 +498,6 @@ export default function GeneratePOModal({
                             }).format(item.unitPrice)}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {/* Editable WHT */}
                             <input
                               type="number"
                               value={item.whtPercentage}
@@ -563,7 +533,6 @@ export default function GeneratePOModal({
                             )}
                           </td>
                           <td className="px-4 py-3 text-center">
-                            {/* Status Flag */}
                             <select
                               value={item.status}
                               onChange={(e) => {
@@ -606,7 +575,6 @@ export default function GeneratePOModal({
                   </table>
                 </div>
 
-                {/* Summary Footer */}
                 <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                   <div className="text-sm text-gray-500">
                     {
