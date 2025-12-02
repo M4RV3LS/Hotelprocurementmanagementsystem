@@ -1,13 +1,25 @@
 import { useState } from "react";
-import { X, Plus, Trash2, Upload } from "lucide-react";
+import {
+  X,
+  Plus,
+  Trash2,
+  Upload,
+  Link as LinkIcon,
+} from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import { INDONESIA_REGIONS } from "../../data/mockData";
 
+// Updated Vendor Interface to include Property Type
+interface ExtendedVendor extends Omit<Vendor, "agreements"> {
+  propertyType: "Franchise" | "Leasing" | "All";
+  agreements: Agreement[];
+}
+
 interface VendorFormModalProps {
-  vendor: Vendor | null;
+  vendor: ExtendedVendor | null;
   onClose: () => void;
-  onSave: (vendor: Vendor) => void;
+  onSave: (vendor: ExtendedVendor) => void;
   activePaymentMethods: string[];
   items: any[];
 }
@@ -15,7 +27,6 @@ interface VendorFormModalProps {
 interface VendorItem {
   itemCode: string;
   itemName: string;
-  // Removed selectedProperties
   minQuantity: number;
   multipleOf: number;
   priceType: "Fixed" | "Not Fixed";
@@ -24,23 +35,25 @@ interface VendorItem {
   taxPercentage: number;
 }
 
+// Updated Agreement Interface to include Link
 interface Agreement {
   id: string;
   type: "Agreement" | "Offering";
   number: string;
   startDate: string;
   endDate: string;
-  documentLink?: string;
+  documentLink?: string; // Kept for backward compatibility
+  link: string; // New field as requested
 }
 
-export default function VendorFormModal({
+export default function VendorFormModalUpdated({
   vendor,
   onClose,
   onSave,
   activePaymentMethods,
   items,
 }: VendorFormModalProps) {
-  const [formData, setFormData] = useState<Vendor>(
+  const [formData, setFormData] = useState<ExtendedVendor>(
     vendor || {
       vendorCode: "",
       vendorName: "",
@@ -56,6 +69,7 @@ export default function VendorFormModal({
       agreements: [],
       items: [],
       isActive: true,
+      propertyType: "All", // Default value
     },
   );
 
@@ -73,7 +87,6 @@ export default function VendorFormModal({
     number | null
   >(null);
 
-  // FIXED: Initial state without selectedProperties
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
     itemName: "",
@@ -101,7 +114,6 @@ export default function VendorFormModal({
       (i) => i.itemCode === itemCode,
     );
     if (selectedItem) {
-      // FIXED: Removed selectedProperties assignment
       setNewItem({
         itemCode: selectedItem.itemCode,
         itemName: selectedItem.itemName,
@@ -125,15 +137,15 @@ export default function VendorFormModal({
       return;
     }
 
+    // STRICT VALIDATION: Fixed Price MUST have Agreement
     if (newItem.priceType === "Fixed") {
       if (newItem.unitPrice <= 0) {
         alert("Unit price is required for fixed price items");
         return;
       }
-      // Check if agreement is required only if agreements exist
-      if (agreements.length > 0 && !newItem.agreementNumber) {
+      if (!newItem.agreementNumber) {
         alert(
-          "Agreement/Offering number is required for fixed price items",
+          "Validation Error: Fixed Price items must be linked to an Agreement or Offering number.",
         );
         return;
       }
@@ -150,7 +162,6 @@ export default function VendorFormModal({
       setVendorItems((prev) => [...prev, newItem]);
     }
 
-    // FIXED: Reset state without selectedProperties
     setNewItem({
       itemCode: "",
       itemName: "",
@@ -183,6 +194,7 @@ export default function VendorFormModal({
       number: "",
       startDate: "",
       endDate: "",
+      link: "", // Init empty
       documentLink: "",
     };
     setAgreements([...agreements, newAgreement]);
@@ -190,7 +202,7 @@ export default function VendorFormModal({
 
   const handleAgreementChange = (
     index: number,
-    field: string,
+    field: keyof Agreement,
     value: string,
   ) => {
     setAgreements((prev) =>
@@ -231,16 +243,6 @@ export default function VendorFormModal({
     };
 
     onSave(updatedVendor);
-  };
-
-  const handleDownloadTemplate = () => {
-    alert("Excel template download would be implemented here");
-  };
-
-  const handleBulkUpload = () => {
-    alert(
-      "Bulk upload functionality would be implemented here",
-    );
   };
 
   const [selectedRegions, setSelectedRegions] = useState<
@@ -287,6 +289,28 @@ export default function VendorFormModal({
                 Vendor Information
               </h3>
               <div className="grid grid-cols-2 gap-4">
+                {/* Property Type Field (Requirement #3) */}
+                <div className="col-span-2">
+                  <label className="block text-gray-700 mb-2">
+                    Property Type{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.propertyType}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "propertyType",
+                        e.target.value,
+                      )
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                  >
+                    <option value="All">All</option>
+                    <option value="Franchise">Franchise</option>
+                    <option value="Leasing">Leasing</option>
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Vendor Code{" "}
@@ -450,7 +474,7 @@ export default function VendorFormModal({
               </div>
             </div>
 
-            {/* Agreements */}
+            {/* Agreements Section (Requirement #1) */}
             <div className="border-t border-gray-200 pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900">
@@ -467,11 +491,11 @@ export default function VendorFormModal({
               {agreements.map((agreement, index) => (
                 <div
                   key={agreement.id}
-                  className="border border-gray-200 rounded-lg p-4 mb-3"
+                  className="border border-gray-200 rounded-lg p-4 mb-3 bg-gray-50"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-gray-700">
-                      Agreement/Offering {index + 1}
+                    <h4 className="text-gray-700 font-medium">
+                      Document {index + 1}
                     </h4>
                     <button
                       onClick={() =>
@@ -501,28 +525,115 @@ export default function VendorFormModal({
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                       />
                     </div>
+
+                    {/* Requirement #1: Radio Button for Type */}
                     <div>
                       <label className="block text-gray-700 mb-2">
-                        Type
+                        Type{" "}
+                        <span className="text-red-500">*</span>
                       </label>
-                      <select
-                        value={agreement.type}
+                      <div className="flex gap-4 mt-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`agreementType-${index}`}
+                            checked={
+                              agreement.type === "Agreement"
+                            }
+                            onChange={() =>
+                              handleAgreementChange(
+                                index,
+                                "type",
+                                "Agreement",
+                              )
+                            }
+                            className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224] border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">
+                            Agreement
+                          </span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name={`agreementType-${index}`}
+                            checked={
+                              agreement.type === "Offering"
+                            }
+                            onChange={() =>
+                              handleAgreementChange(
+                                index,
+                                "type",
+                                "Offering",
+                              )
+                            }
+                            className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224] border-gray-300"
+                          />
+                          <span className="text-sm text-gray-700">
+                            Offering
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Start/End Dates */}
+                    <div>
+                      <label className="block text-gray-700 mb-2">
+                        Start Date
+                      </label>
+                      <input
+                        type="date"
+                        value={agreement.startDate}
                         onChange={(e) =>
                           handleAgreementChange(
                             index,
-                            "type",
+                            "startDate",
                             e.target.value,
                           )
                         }
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                      >
-                        <option value="Agreement">
-                          Agreement
-                        </option>
-                        <option value="Offering">
-                          Offering
-                        </option>
-                      </select>
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-700 mb-2">
+                        End Date
+                      </label>
+                      <input
+                        type="date"
+                        value={agreement.endDate}
+                        onChange={(e) =>
+                          handleAgreementChange(
+                            index,
+                            "endDate",
+                            e.target.value,
+                          )
+                        }
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                      />
+                    </div>
+
+                    {/* Requirement #1: Link Input */}
+                    <div className="col-span-2">
+                      <label className="block text-gray-700 mb-2">
+                        Document Link{" "}
+                        <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="url"
+                          value={agreement.link}
+                          onChange={(e) =>
+                            handleAgreementChange(
+                              index,
+                              "link",
+                              e.target.value,
+                            )
+                          }
+                          placeholder="https://drive.google.com/..."
+                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -584,6 +695,9 @@ export default function VendorFormModal({
                       <th className="px-4 py-3 text-left text-gray-700">
                         Unit Price
                       </th>
+                      <th className="px-4 py-3 text-left text-gray-700">
+                        Agreement
+                      </th>
                       <th className="px-4 py-3 text-right text-gray-700">
                         Action
                       </th>
@@ -603,12 +717,29 @@ export default function VendorFormModal({
                             ? `Rp ${item.unitPrice.toLocaleString()}`
                             : "-"}
                         </td>
+                        <td className="px-4 py-3 text-gray-700 text-sm">
+                          {item.priceType === "Fixed" ? (
+                            item.agreementNumber ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                {item.agreementNumber}
+                              </span>
+                            ) : (
+                              <span className="text-red-500 text-xs">
+                                Missing Agreement!
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-gray-400">
+                              -
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() =>
                               handleEditItem(index)
                             }
-                            className="text-[#ec2224] mr-3"
+                            className="text-[#ec2224] mr-3 hover:underline"
                           >
                             Edit
                           </button>
@@ -616,7 +747,7 @@ export default function VendorFormModal({
                             onClick={() =>
                               handleDeleteItem(index)
                             }
-                            className="text-red-600"
+                            className="text-red-600 hover:underline"
                           >
                             Delete
                           </button>
@@ -633,13 +764,13 @@ export default function VendorFormModal({
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg"
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="px-6 py-2 bg-[#ec2224] text-white rounded-lg"
+              className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21]"
             >
               Save Vendor
             </button>
@@ -718,7 +849,7 @@ export default function VendorFormModal({
                     <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-4">
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         checked={newItem.priceType === "Fixed"}
@@ -728,10 +859,11 @@ export default function VendorFormModal({
                             priceType: "Fixed",
                           })
                         }
+                        className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224] border-gray-300"
                       />{" "}
                       Fixed
                     </label>
-                    <label className="flex items-center gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="radio"
                         checked={
@@ -745,6 +877,7 @@ export default function VendorFormModal({
                             agreementNumber: "",
                           })
                         }
+                        className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224] border-gray-300"
                       />{" "}
                       Not Fixed
                     </label>
@@ -785,7 +918,12 @@ export default function VendorFormModal({
                             agreementNumber: e.target.value,
                           })
                         }
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                        className={`w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] ${
+                          !newItem.agreementNumber &&
+                          agreements.length > 0
+                            ? "border-red-300 bg-red-50"
+                            : "border-gray-300"
+                        }`}
                       >
                         <option value="">
                           Select Agreement
@@ -795,10 +933,16 @@ export default function VendorFormModal({
                             key={agr.id}
                             value={agr.number}
                           >
-                            {agr.number}
+                            {agr.number} ({agr.type})
                           </option>
                         ))}
                       </select>
+                      {agreements.length === 0 && (
+                        <p className="text-xs text-red-500 mt-1">
+                          No agreements available. Please add an
+                          Agreement/Offering above first.
+                        </p>
+                      )}
                     </div>
                   </>
                 )}

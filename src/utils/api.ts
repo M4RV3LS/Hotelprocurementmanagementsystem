@@ -1,10 +1,7 @@
 // src/utils/api.ts
 import { createClient } from "@jsr/supabase__supabase-js";
 import { projectId, publicAnonKey } from "./supabase/info";
-import type {
-  ProcurementRequest,
-  ProcurementItem,
-} from "../data/mockData";
+import type { ProcurementRequest } from "../data/mockData";
 
 // Initialize Supabase Client
 const supabaseUrl = `https://${projectId}.supabase.co`;
@@ -34,14 +31,13 @@ const mapDBRequestToFrontend = (
   row: any,
 ): ProcurementRequest => {
   const region = determineRegion(row);
-
   return {
     prNumber: row.pr_number,
     prDate: row.pr_date,
     propertyName: row.property_name,
     propertyCode: row.property_code,
-    propertyType: "Hotel",
-    brandName: "RedDoorz",
+    propertyType: "Hotel", // Default or map from DB if column exists
+    brandName: "RedDoorz", // Default or map
     propertyAddress: row.property_address || "",
     picName: row.pic_name || "",
     picNumber: row.pic_number || "",
@@ -49,7 +45,7 @@ const mapDBRequestToFrontend = (
     requestorEmail: row.requestor_email,
     status: row.status,
     items: (row.request_items || []).map((item: any) => ({
-      id: item.id,
+      id: item.id, // CRITICAL: This is the real UUID
       prNumber: row.pr_number,
       itemCode: item.master_items?.code || "UNKNOWN",
       itemName:
@@ -60,7 +56,7 @@ const mapDBRequestToFrontend = (
       uom: item.uom,
       region: region,
       itemStatus: item.item_status || "Not Set",
-      status: item.status,
+      status: item.status, // This ensures item level status is preserved
       vendorName: item.vendors?.name,
       vendorCode: item.vendors?.code,
       paymentTerms: item.payment_terms,
@@ -95,7 +91,7 @@ export const procurementRequestsAPI = {
         *,
         request_items (
           *,
-          master_items (code, category), 
+          master_items (code, name, category), 
           vendors (name, code)
         ),
         activity_logs (*)
@@ -107,6 +103,7 @@ export const procurementRequestsAPI = {
     return data.map(mapDBRequestToFrontend);
   },
 
+  // UPDATED SAVE FUNCTION FOR FULL SYNCHRONIZATION
   save: async (
     request: ProcurementRequest,
   ): Promise<ProcurementRequest> => {
@@ -129,6 +126,7 @@ export const procurementRequestsAPI = {
           pic_name: request.picName,
           pic_number: request.picNumber,
           status: request.status,
+          updated_at: new Date().toISOString(),
         },
         { onConflict: "pr_number" },
       )
@@ -139,45 +137,73 @@ export const procurementRequestsAPI = {
     const prId = prData.id;
 
     // 2. Upsert Items
+    // Map items to DB structure
     const itemsToUpsert = request.items.map((item) => ({
+      // If ID is a temp ID (e.g. "1-1") or missing, set to undefined to let DB generate UUID
+      // If it is a UUID (length > 30), keep it.
+      id: item.id && item.id.length > 30 ? item.id : undefined,
       request_id: prId,
-      id:
-        item.id.includes("-") && item.id.length < 36
-          ? undefined
-          : item.id,
+      // We need master_item_id. Ideally, look this up or assume frontend sends it.
+      // For now, we rely on itemCode mapping if possible, or keep existing.
+      // NOTE: Real implementation requires fetching master_item_id based on itemCode if not present
       item_name_snapshot: item.itemName,
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
       uom: item.uom,
+      // payment_terms, etc...
       unit_price: item.unitPrice,
       total_price: item.totalPrice,
       po_number: item.poNumber,
       po_date: item.poDate ? new Date(item.poDate) : null,
       estimated_delivery_start: item.estimatedDeliveryStart,
       estimated_delivery_end: item.estimatedDeliveryEnd,
-      // Note: For updates, we keep existing relations if not passed
     }));
 
     if (itemsToUpsert.length > 0) {
+      // We upsert and SELECT the new IDs to return to frontend
       const { error: itemsError } = await supabase
         .from("request_items")
-        .upsert(itemsToUpsert);
+        .upsert(itemsToUpsert, { onConflict: "id" }); // Assuming ID is the conflict key
 
       if (itemsError)
         console.error("Error saving items:", itemsError);
     }
 
-    return request;
+    // 3. FETCH FRESH DATA to ensure Frontend has real UUIDs
+    // This solves the issue of status updates failing on subsequent tries
+    const { data: freshData, error: refreshError } =
+      await supabase
+        .from("procurement_requests")
+        .select(
+          `
+        *,
+        request_items (
+          *,
+          master_items (code, name, category), 
+          vendors (name, code)
+        ),
+        activity_logs (*)
+      `,
+        )
+        .eq("id", prId)
+        .single();
+
+    if (refreshError) throw refreshError;
+
+    // Return the fresh object from DB
+    return mapDBRequestToFrontend(freshData);
   },
 
   bulkUpdate: async (
     requests: ProcurementRequest[],
   ): Promise<ProcurementRequest[]> => {
+    const updatedRequests: ProcurementRequest[] = [];
     for (const req of requests) {
-      await procurementRequestsAPI.save(req);
+      const updated = await procurementRequestsAPI.save(req);
+      updatedRequests.push(updated);
     }
-    return requests;
+    return updatedRequests;
   },
 
   delete: async (prNumber: string): Promise<void> => {
@@ -217,11 +243,15 @@ export const vendorsAPI = {
       picName: v.contact_person,
       ppnPercentage: v.ppn_percentage,
       serviceChargePercentage: v.service_charge_percentage,
-      // pb1Percentage: v.pb1_percentage, // Uncomment if column exists
       paymentMethods: v.payment_methods,
       isActive: v.is_active,
       vendorAgreementLink: v.agreement_link,
-      agreements: [], // Needs separate table to persist properly
+      // New Field Mapping
+      propertyType: v.property_type || "All",
+      // Ensure agreements handle the new link field
+      agreements: Array.isArray(v.agreements)
+        ? v.agreements
+        : [],
       items: v.items.map((vi: any) => ({
         itemCode: vi.master_item?.code,
         itemName: vi.master_item?.name,
@@ -229,12 +259,11 @@ export const vendorsAPI = {
         unitPrice: vi.unit_price,
         minQuantity: vi.min_quantity,
         agreementNumber: vi.agreement_number,
-        taxPercentage: 11,
+        taxPercentage: 11, // Default or derived
       })),
     }));
   },
 
-  // FIXED: Now saves Vendor AND Vendor Catalog Items
   save: async (vendor: any): Promise<any> => {
     // 1. Save Vendor Header
     const { data: vendorData, error: vendorError } =
@@ -256,6 +285,9 @@ export const vendorsAPI = {
               vendor.serviceChargePercentage,
             is_active: vendor.isActive,
             agreement_link: vendor.vendorAgreementLink,
+            // New Fields to Save
+            property_type: vendor.propertyType,
+            agreements: vendor.agreements, // Now includes link/documentLink
           },
           { onConflict: "code" },
         )
@@ -266,9 +298,8 @@ export const vendorsAPI = {
 
     const vendorId = vendorData.id;
 
-    // 2. Save Vendor Catalog Items (The mapping configuration)
+    // 2. Save Vendor Catalog Items (Existing Logic maintained)
     if (vendor.items && vendor.items.length > 0) {
-      // A. Get UUIDs for the items based on their codes
       const itemCodes = vendor.items.map(
         (i: any) => i.itemCode,
       );
@@ -284,7 +315,6 @@ export const vendorsAPI = {
         masterItems?.map((i) => [i.code, i.id]),
       );
 
-      // B. Prepare Data
       const catalogItems = vendor.items
         .map((vItem: any) => {
           const itemId = itemMap.get(vItem.itemCode);
@@ -301,7 +331,6 @@ export const vendorsAPI = {
         })
         .filter((i: any) => i !== null);
 
-      // C. Sync: Delete old mappings for this vendor and insert new ones
       const { error: deleteError } = await supabase
         .from("vendor_catalog_items")
         .delete()
@@ -317,7 +346,6 @@ export const vendorsAPI = {
         if (insertError) throw insertError;
       }
     } else {
-      // If items list is empty, clear the catalog
       await supabase
         .from("vendor_catalog_items")
         .delete()
@@ -633,5 +661,162 @@ export const initializeDatabase = async (data: {
   } catch (error) {
     console.error("Critical Seeding Error:", error);
     throw error;
+  }
+};
+
+// ========================================
+// PURCHASE ORDERS API (NEW)
+// ========================================
+export const purchaseOrdersAPI = {
+  getAll: async (): Promise<PurchaseOrder[]> => {
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .select(
+        `
+        *,
+        vendor:vendors(name),
+        items:request_items(
+          *,
+          master_items(name, code)
+        )
+      `,
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return data.map((po: any) => ({
+      id: po.id,
+      poNumber: po.po_number,
+      generatedDate: po.generated_date,
+      vendorId: po.vendor_id,
+      vendorName: po.vendor?.name || "Unknown",
+      status: po.status,
+      approvalStatus: po.approval_status,
+      signedPoLink: po.signed_po_link,
+      totalAmount: po.total_amount,
+      items: (po.items || []).map((i: any) => ({
+        id: i.id,
+        prNumber: "PR-LINKED", // Can be derived if needed
+        itemName: i.master_items?.name || i.item_name_snapshot,
+        quantity: i.quantity,
+        uom: i.uom,
+        unitPrice: i.unit_price,
+        totalPrice: i.total_price,
+        status: i.status,
+      })),
+      prNumbers: Array.from(
+        new Set((po.items || []).map((i: any) => i.request_id)),
+      ), // Ideally fetch PR Number string
+    }));
+  },
+
+  // Requirement 1: Create PO and set Item Status to "Waiting PO Approval"
+  create: async (
+    poData: Partial<PurchaseOrder>,
+    itemIds: string[],
+  ): Promise<void> => {
+    // 1. Create Purchase Order Header
+    const { data: newPO, error: poError } = await supabase
+      .from("purchase_orders")
+      .insert({
+        po_number: poData.poNumber,
+        vendor_id: poData.vendorId,
+        generated_date: poData.generatedDate,
+        total_amount: poData.totalAmount,
+        status: "Open",
+        approval_status: "Pending",
+      })
+      .select()
+      .single();
+
+    if (poError) throw poError;
+
+    // 2. Link Items to PO and Update Status
+    const { error: itemError } = await supabase
+      .from("request_items")
+      .update({
+        purchase_order_id: newPO.id,
+        po_number: poData.poNumber,
+        po_date: poData.generatedDate,
+        status: "Waiting PO Approval", // <--- Requirement 1 Implemented
+      })
+      .in("id", itemIds);
+
+    if (itemError) throw itemError;
+  },
+
+  uploadSignedPO: async (
+    poId: string,
+    fileLink: string,
+  ): Promise<void> => {
+    const { error } = await supabase
+      .from("purchase_orders")
+      .update({
+        signed_po_link: fileLink,
+        approval_status: "Approved",
+      })
+      .eq("id", poId);
+
+    if (error) throw error;
+  },
+
+  markAsProcessByVendor: async (
+    poId: string,
+  ): Promise<void> => {
+    // 1. Get all items
+    const { data: items } = await supabase
+      .from("request_items")
+      .select("id, request_id")
+      .eq("purchase_order_id", poId);
+
+    if (!items || items.length === 0) return;
+    const itemIds = items.map((i) => i.id);
+
+    // 2. Update Items Status
+    const { error } = await supabase
+      .from("request_items")
+      .update({ status: "Process by Vendor" })
+      .in("id", itemIds);
+
+    if (error) throw error;
+
+    // 3. AUTO-CLOSE PR CHECK (Revamp Req 1)
+    // Check each related PR: Close if ALL items are >= 'Process by Vendor'
+    for (const reqId of requestIds) {
+      await checkAndClosePR(reqId);
+    }
+  },
+};
+
+// Helper: Check PR Status and Close if applicable
+const checkAndClosePR = async (requestId: string) => {
+  // Fetch all items for this PR
+  const { data: allItems } = await supabase
+    .from("request_items")
+    .select("status")
+    .eq("request_id", requestId);
+
+  if (!allItems) return;
+
+  // Logic: If EVERY item is in a "Progress" state or "Closed"
+  // The requirement says: "status = Process by Vendor"
+  // We assume "Delivered" and "Closed" also count as satisfying the condition to close the PR.
+  const validStatuses = [
+    "Process by Vendor",
+    "Delivered",
+    "Closed",
+    "Cancelled by Procurement",
+  ];
+
+  const allProcessed = allItems.every((item) =>
+    validStatuses.includes(item.status),
+  );
+
+  if (allProcessed) {
+    await supabase
+      .from("procurement_requests")
+      .update({ status: "Close" })
+      .eq("id", requestId);
   }
 };

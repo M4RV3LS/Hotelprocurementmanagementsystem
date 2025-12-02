@@ -1,5 +1,6 @@
 // src/data/seedData.ts
 import type { ProcurementRequest } from "./mockData";
+import { comprehensiveSampleRequests } from "./mockData-comprehensive"; // Assuming this file exists from previous context
 
 export const initialVendors = [
   {
@@ -119,6 +120,7 @@ export const initialRequests: ProcurementRequest[] = [
     picNumber: "+62 812 3456 7890",
     requestorName: "Jane Smith",
     requestorEmail: "jane.smith@reddoorz.com",
+    status: "Review by Procurement", // DB status format
     activityLog: [],
     items: [
       {
@@ -136,4 +138,5 @@ export const initialRequests: ProcurementRequest[] = [
       },
     ],
   },
+  ...comprehensiveSampleRequests,
 ];

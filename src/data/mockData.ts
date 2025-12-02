@@ -12,9 +12,18 @@ export interface ActivityLog {
 export type ProcurementStatus =
   | "Review by Procurement"
   | "Waiting PO"
-  | "On Process by Vendor"
+  | "Waiting PO Approval"
+  | "Process by Vendor"
   | "Delivered"
-  | "Finished";
+  | "Closed"
+  | "Cancelled by Procurement";
+
+// 2. Revamped Request Status
+export type RequestHeaderStatus = "Open" | "Close";
+
+// 3. PO Statuses
+export type POStatus = "Open" | "Close";
+export type POApprovalStatus = "Pending" | "Approved";
 
 export type ItemStatus = "Not Set" | "Cancelled" | "Ready";
 
@@ -76,6 +85,7 @@ export interface ProcurementItem {
   region: string;
   itemStatus: ItemStatus;
   status: ProcurementStatus;
+  purchaseOrderId?: string;
   poNumber?: string;
   poDate?: string;
   designLink?: string;
@@ -107,6 +117,21 @@ export interface ProcurementRequest {
   invoiceNumber?: string;
   invoiceDate?: string;
   invoiceFileLink?: string;
-  items: ProcurementItem[];
   activityLog?: ActivityLog[];
+  status: RequestHeaderStatus; // Changed type
+  items: ProcurementItem[];
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  generatedDate: string;
+  vendorName: string; // Joined from vendor
+  vendorId: string;
+  status: POStatus;
+  approvalStatus: POApprovalStatus;
+  signedPoLink?: string;
+  totalAmount: number;
+  items: ProcurementItem[]; // Hydrated items
+  prNumbers: string[]; // Derived list of PRs
 }

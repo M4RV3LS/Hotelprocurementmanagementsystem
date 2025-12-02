@@ -258,5 +258,4 @@ export const comprehensiveSampleRequests: ProcurementRequest[] = [
   }
 ];
 
-// Note: This is a simplified version showing the structure
-// The full implementation would include all 35 requests as specified
+
