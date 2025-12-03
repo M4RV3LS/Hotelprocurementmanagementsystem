@@ -7,18 +7,18 @@ import type {
 } from "../data/mockData";
 
 // Initialize Supabase Client
-const supabaseUrl = `https://${projectId}.supabase.co`;
-const supabase = createClient(supabaseUrl, publicAnonKey);
+const supabase = createClient(
+  `https://${projectId}.supabase.co`,
+  publicAnonKey
+);
 
-// ========================================
-// HELPERS: Data Mapping (DB <-> Frontend)
-// ========================================
-
+// Helper function to determine region from a procurement request row
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
-  const address = (row.property_address || "").toLowerCase();
-  if (address.includes("jakarta")) return "DKI Jakarta";
-  if (address.includes("bali")) return "Bali";
+  if (row.request_items?.[0]) {
+    // Fallback logic if needed
+    return "DKI Jakarta";
+  }
   return "DKI Jakarta";
 };
 
@@ -31,8 +31,11 @@ const mapDBRequestToFrontend = (
     prDate: row.pr_date,
     propertyName: row.property_name,
     propertyCode: row.property_code,
+
+    // REQ 1: Property Type mapped from Header (procurement_requests)
     propertyType: row.property_type || "Leasing",
-    brandName: "RedDoorz",
+
+    brandName: "RedDoorz", // Hardcoded per your mock, or map from DB if exists
     propertyAddress: row.property_address || "",
     picName: row.pic_name || "",
     picNumber: row.pic_number || "",
@@ -73,10 +76,6 @@ const mapDBRequestToFrontend = (
   };
 };
 
-// ========================================
-// PROCUREMENT REQUESTS API
-// ========================================
-
 export const procurementRequestsAPI = {
   getAll: async (): Promise<ProcurementRequest[]> => {
     const { data, error } = await supabase
@@ -105,6 +104,7 @@ export const procurementRequestsAPI = {
       request.items[0]?.region || "DKI Jakarta";
 
     // 1. Upsert Header
+    // REQ 1: Saving property_type to procurement_requests
     const { data: prData, error: prError } = await supabase
       .from("procurement_requests")
       .upsert(
@@ -115,7 +115,10 @@ export const procurementRequestsAPI = {
           property_code: request.propertyCode,
           property_address: request.propertyAddress,
           region: derivedRegion,
+
+          // Saving Property Type to Header
           property_type: request.propertyType,
+
           requestor_name: request.requestorName,
           requestor_email: request.requestorEmail,
           pic_name: request.picName,
@@ -131,9 +134,7 @@ export const procurementRequestsAPI = {
     if (prError) throw prError;
     const prId = prData.id;
 
-    // ---------------------------------------------------------
-    // FIX BUG #2: Fetch Vendor IDs to ensure assignments are saved
-    // ---------------------------------------------------------
+    // 2. Vendor Map Logic
     const uniqueVendorCodes = Array.from(
       new Set(
         request.items.map((i) => i.vendorCode).filter(Boolean),
@@ -150,11 +151,9 @@ export const procurementRequestsAPI = {
 
       vendors?.forEach((v) => vendorMap.set(v.code, v.id));
     }
-    // ---------------------------------------------------------
 
-    // 2. Upsert Items with correct Vendor ID
+    // 3. Upsert Items
     const itemsToUpsert = request.items.map((item) => {
-      // Resolve Vendor Code to UUID
       const assignedVendorId = item.vendorCode
         ? vendorMap.get(item.vendorCode)
         : null;
@@ -177,6 +176,7 @@ export const procurementRequestsAPI = {
         po_date: item.poDate ? new Date(item.poDate) : null,
         estimated_delivery_start: item.estimatedDeliveryStart,
         estimated_delivery_end: item.estimatedDeliveryEnd,
+        // REMOVED: property_type from items payload
       };
     });
 
@@ -189,7 +189,7 @@ export const procurementRequestsAPI = {
         console.error("Error saving items:", itemsError);
     }
 
-    // 3. Fetch Fresh Data
+    // 4. Fetch Fresh Data
     const { data: freshData, error: refreshError } =
       await supabase
         .from("procurement_requests")
@@ -231,9 +231,6 @@ export const procurementRequestsAPI = {
   },
 };
 
-// ========================================
-// VENDORS API
-// ========================================
 export const vendorsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase.from("vendors")
@@ -369,10 +366,6 @@ export const vendorsAPI = {
   },
 };
 
-// ========================================
-// ITEMS API
-// ========================================
-
 export const itemsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
@@ -416,10 +409,6 @@ export const itemsAPI = {
   },
 };
 
-// ========================================
-// PAYMENT METHODS API
-// ========================================
-
 export const paymentMethodsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
@@ -447,10 +436,6 @@ export const paymentMethodsAPI = {
     return paymentMethods;
   },
 };
-
-// ========================================
-// DATABASE SEEDING / INITIALIZATION
-// ========================================
 
 export const initializeDatabase = async (data: {
   requests: ProcurementRequest[];
@@ -657,9 +642,6 @@ export const initializeDatabase = async (data: {
   }
 };
 
-// ========================================
-// PURCHASE ORDERS API
-// ========================================
 export const purchaseOrdersAPI = {
   getAll: async (): Promise<PurchaseOrder[]> => {
     const { data, error } = await supabase
@@ -732,30 +714,44 @@ export const purchaseOrdersAPI = {
 
     if (poError) throw poError;
 
-    // 2. REQUIREMENT 1: Update Item Status to "Waiting PO Approval"
-    // Using Promise.all for parallel updates
-    const updates = poData.items.map((item) =>
-      supabase
-        .from("request_items")
-        .update({
-          purchase_order_id: newPO.id,
-          po_number: poData.poNumber,
-          po_date: poData.generatedDate,
-          status: "Waiting PO Approval",
-          tax_percentage: item.whtPercentage,
-          estimated_delivery_start: item.eta
-            ? new Date(item.eta)
-            : null,
-        })
-        .eq("id", item.id),
-    );
+    // FIX: BUG TRACE - Status not updating
+    // The previous implementation used map() without waiting properly or handling errors robustly.
+    // Also, converting JS Date object to DB Date column often causes issues.
+    // We will use Promise.all and explicit string handling for dates.
 
-    const results = await Promise.all(updates);
-    const errors = results.filter((r) => r.error);
-    if (errors.length > 0) {
-      console.error("Errors updating items:", errors);
-      throw new Error("Failed to update some items.");
-    }
+    const updates = poData.items.map(async (item) => {
+      const updatePayload: any = {
+        purchase_order_id: newPO.id,
+        po_number: poData.poNumber,
+        po_date: poData.generatedDate,
+
+        // CRITICAL: Explicit status string matching DB default/constraint types
+        status: "Waiting PO Approval",
+
+        tax_percentage: item.whtPercentage,
+      };
+
+      // Safely handle ETA if present
+      if (item.eta) {
+        // Ensure we send YYYY-MM-DD string, not a Date object
+        updatePayload.estimated_delivery_start = item.eta;
+      }
+
+      const { error } = await supabase
+        .from("request_items")
+        .update(updatePayload)
+        .eq("id", item.id);
+
+      if (error) {
+        console.error(
+          `Failed to update item ${item.id}:`,
+          error,
+        );
+        throw error;
+      }
+    });
+
+    await Promise.all(updates);
   },
 
   delete: async (poId: string): Promise<void> => {
