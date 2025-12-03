@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   X,
   Plus,
   Trash2,
-  Upload,
-  Link as LinkIcon,
   CheckSquare,
   Square,
+  AlertTriangle,
+  Link as LinkIcon,
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import { INDONESIA_REGIONS } from "../../data/mockData";
+import ConfirmationModal from "./ConfirmationModal";
 
 interface ExtendedVendor extends Omit<Vendor, "agreements"> {
   agreements: Agreement[];
@@ -92,6 +93,14 @@ export default function VendorFormModalUpdated({
     number | null
   >(null);
 
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    isOpen: boolean;
+    itemToAdd: VendorItem | null;
+  }>({
+    isOpen: false,
+    itemToAdd: null,
+  });
+
   // Item Form State
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
@@ -125,15 +134,15 @@ export default function VendorFormModalUpdated({
   };
 
   const handleTickAllColumn = (type: string) => {
-    // Check if all are currently ticked to determine if we uncheck or check
-    const allTicked = vendorItems.every((item) =>
-      item.propertyTypes.includes(type),
-    );
+    const allTicked =
+      vendorItems.length > 0 &&
+      vendorItems.every((item) =>
+        item.propertyTypes.includes(type),
+      );
 
     setVendorItems((prev) =>
       prev.map((item) => {
         if (allTicked) {
-          // Uncheck all
           return {
             ...item,
             propertyTypes: item.propertyTypes.filter(
@@ -141,7 +150,6 @@ export default function VendorFormModalUpdated({
             ),
           };
         } else {
-          // Check all (add if missing)
           return item.propertyTypes.includes(type)
             ? item
             : {
@@ -214,6 +222,62 @@ export default function VendorFormModalUpdated({
       propertyTypes: [],
     });
     setShowAddItem(false);
+  };
+
+  const attemptAddItem = () => {
+    if (!newItem.itemCode || newItem.minQuantity <= 0) {
+      alert(
+        "Please fill in all required fields (Item and Min Quantity).",
+      );
+      return;
+    }
+
+    // Check if item already exists in the list
+    // We skip this check if we are EDITING the same row (index matches)
+    const isDuplicate = vendorItems.some(
+      (item, index) =>
+        item.itemCode === newItem.itemCode &&
+        index !== editingItemIndex,
+    );
+
+    if (isDuplicate) {
+      // Trigger Warning Modal
+      setDuplicateWarning({
+        isOpen: true,
+        itemToAdd: newItem,
+      });
+    } else {
+      // No duplicate, add directly
+      commitItemAdd(newItem);
+    }
+  };
+
+  const commitItemAdd = (itemToCommit: VendorItem) => {
+    if (editingItemIndex !== null) {
+      setVendorItems((prev) =>
+        prev.map((item, idx) =>
+          idx === editingItemIndex ? itemToCommit : item,
+        ),
+      );
+      setEditingItemIndex(null);
+    } else {
+      setVendorItems((prev) => [...prev, itemToCommit]);
+    }
+
+    // Reset Form
+    setNewItem({
+      itemCode: "",
+      itemName: "",
+      minQuantity: 1,
+      multipleOf: 1,
+      priceType: "Fixed",
+      unitPrice: 0,
+      agreementNumber: "",
+      taxPercentage: 0,
+      propertyTypes: [],
+    });
+    setShowAddItem(false);
+    setDuplicateWarning({ isOpen: false, itemToAdd: null });
   };
 
   const handleEditItem = (index: number) => {
@@ -327,28 +391,6 @@ export default function VendorFormModalUpdated({
                 Vendor Information
               </h3>
               <div className="grid grid-cols-2 gap-4">
-                {/* Property Type Field (Requirement #3) */}
-                <div className="col-span-2">
-                  <label className="block text-gray-700 mb-2">
-                    Property Type{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.propertyType}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "propertyType",
-                        e.target.value,
-                      )
-                    }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                  >
-                    <option value="All">All</option>
-                    <option value="Franchise">Franchise</option>
-                    <option value="Leasing">Leasing</option>
-                  </select>
-                </div>
-
                 <div>
                   <label className="block text-gray-700 mb-2">
                     Vendor Code{" "}
@@ -843,6 +885,25 @@ export default function VendorFormModalUpdated({
           </div>
         </div>
       </div>
+
+      {duplicateWarning.isOpen &&
+        duplicateWarning.itemToAdd && (
+          <ConfirmationModal
+            title="Duplicate Item Detected"
+            message={`The item "${duplicateWarning.itemToAdd.itemName}" (${duplicateWarning.itemToAdd.itemCode}) already exists in this vendor's list.\n\nAdding it again allows you to configure different properties (e.g., separate agreements or price types) for the same item.\n\nDo you want to proceed?`}
+            confirmLabel="Yes, Add Duplicate"
+            confirmStyle="primary"
+            onConfirm={() =>
+              commitItemAdd(duplicateWarning.itemToAdd!)
+            }
+            onCancel={() =>
+              setDuplicateWarning({
+                isOpen: false,
+                itemToAdd: null,
+              })
+            }
+          />
+        )}
 
       {/* Add/Edit Item Modal */}
       {showAddItem && (
