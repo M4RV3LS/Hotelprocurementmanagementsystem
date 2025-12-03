@@ -163,6 +163,15 @@ export default function RequestDetailModal({
                   <div>
                     <span className="text-gray-600">
                       Property Type:
+                    </span>
+                    {/* REQUIREMENT 1.3: Displaying Value from Table procurement_requests */}
+                    <div className="text-gray-900 font-medium">
+                      {currentRequest.propertyType}
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">
+                      Property Type:
                     </span>{" "}
                     <div className="text-gray-900">
                       {currentRequest.propertyType}

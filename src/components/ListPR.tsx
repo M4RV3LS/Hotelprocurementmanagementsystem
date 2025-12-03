@@ -6,11 +6,13 @@ import RequestDetailModal from "./RequestDetailModal";
 // Interface for props to receive DB data and update functions
 interface ListPRProps {
   requests?: ProcurementRequest[];
+  vendors?: any[]; // ADD THIS TYPE definition
   onRequestsUpdate?: (requests: ProcurementRequest[]) => void;
 }
 
 export default function ListPR({
   requests: externalRequests = [],
+  vendors = [], // ADD THIS: Default to empty array
   onRequestsUpdate,
 }: ListPRProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -310,6 +312,7 @@ export default function ListPR({
       {selectedRequest && (
         <RequestDetailModal
           request={selectedRequest}
+          vendors={vendors} // FIX: Pass vendors to modal
           onClose={() => setSelectedRequest(null)}
           onUpdate={handleUpdateRequest}
         />

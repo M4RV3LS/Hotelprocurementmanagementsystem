@@ -27,6 +27,8 @@ export type POApprovalStatus = "Pending" | "Approved";
 
 export type ItemStatus = "Not Set" | "Cancelled" | "Ready";
 
+export type PropertyType = "Leasing" | "Franchise";
+
 export type PaymentTerms =
   | "Cash Before Delivery"
   | "Payment Terms";
@@ -106,7 +108,7 @@ export interface ProcurementRequest {
   prDate: string;
   propertyName: string;
   propertyCode: string;
-  propertyType: string;
+  propertyType: PropertyType;
   brandName: string;
   propertyAddress: string;
   picName: string;

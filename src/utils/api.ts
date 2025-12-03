@@ -31,7 +31,7 @@ const mapDBRequestToFrontend = (
     prDate: row.pr_date,
     propertyName: row.property_name,
     propertyCode: row.property_code,
-    propertyType: "Hotel",
+    propertyType: row.property_type || "Leasing",
     brandName: "RedDoorz",
     propertyAddress: row.property_address || "",
     picName: row.pic_name || "",
@@ -115,6 +115,7 @@ export const procurementRequestsAPI = {
           property_code: request.propertyCode,
           property_address: request.propertyAddress,
           region: derivedRegion,
+          property_type: request.propertyType,
           requestor_name: request.requestorName,
           requestor_email: request.requestorEmail,
           pic_name: request.picName,
@@ -167,7 +168,6 @@ export const procurementRequestsAPI = {
         item_status: item.itemStatus,
         quantity: item.quantity,
         uom: item.uom,
-        // This maps the frontend vendor selection to the DB foreign key
         assigned_vendor_id: assignedVendorId,
         payment_terms: item.paymentTerms,
         unit_price: item.unitPrice,
@@ -741,7 +741,7 @@ export const purchaseOrdersAPI = {
           purchase_order_id: newPO.id,
           po_number: poData.poNumber,
           po_date: poData.generatedDate,
-          status: "Waiting PO Approval", // Requirement 1 Enforced Here
+          status: "Waiting PO Approval",
           tax_percentage: item.whtPercentage,
           estimated_delivery_start: item.eta
             ? new Date(item.eta)

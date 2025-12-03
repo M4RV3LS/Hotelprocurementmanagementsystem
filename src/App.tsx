@@ -186,7 +186,7 @@ export default function App() {
           <ListPR
             requests={sharedRequests}
             onRequestsUpdate={handleRequestsUpdate}
-            vendors={configData.vendors} // Pass Vendors if needed for logic
+            vendors={configData.vendors} // ADD THIS: Pass vendors data
           />
         )}
         {activeTab === "listPO" && (

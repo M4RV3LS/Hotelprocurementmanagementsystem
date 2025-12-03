@@ -54,6 +54,9 @@ export default function GeneratePOModalUpdated({
   const [selectedPaymentTerms, setSelectedPaymentTerms] =
     useState("");
 
+  const [selectedPropertyType, setSelectedPropertyType] =
+    useState("");
+
   // Preview state
   const [poData, setPOData] = useState<POData | null>(null);
 
@@ -85,6 +88,18 @@ export default function GeneratePOModalUpdated({
     return Array.from(uniqueVendors).filter(
       Boolean,
     ) as string[];
+  };
+
+  const getAvailablePropertyTypes = () => {
+    if (!selectedVendor) return [];
+    const items = getAvailableItems().filter(
+      ({ item }) => item.vendorName === selectedVendor,
+    );
+    // Requirement 2: referring to the linked data in "procurement_requests" table
+    const types = new Set(
+      items.map(({ request }) => request.propertyType),
+    );
+    return Array.from(types).filter(Boolean) as string[];
   };
 
   const getAvailableRegions = () => {
@@ -296,6 +311,38 @@ export default function GeneratePOModalUpdated({
                           {getMatchingItemsCount(vendor)} items)
                         </option>
                       ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 mb-2">
+                      Property Type{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedPropertyType}
+                      onChange={(e) => {
+                        setSelectedPropertyType(e.target.value);
+                        setSelectedRegions([]);
+                        setSelectedPaymentTerms("");
+                      }}
+                      disabled={!selectedVendor}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
+                    >
+                      <option value="">
+                        Select Property Type
+                      </option>
+                      {getAvailablePropertyTypes().map(
+                        (type) => (
+                          <option key={type} value={type}>
+                            {type} (
+                            {getMatchingItemsCount(
+                              selectedVendor,
+                              type,
+                            )}{" "}
+                            items)
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
                   <div>
