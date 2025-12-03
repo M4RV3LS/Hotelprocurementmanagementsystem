@@ -186,6 +186,7 @@ export default function VendorFormModalUpdated({
         unitPrice: 0,
         agreementNumber: "",
         taxPercentage: 0,
+        propertyTypes: [], // Initialize as empty array
       });
     }
   };

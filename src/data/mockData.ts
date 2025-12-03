@@ -8,6 +8,13 @@ export interface ActivityLog {
   details?: string;
 }
 
+export interface DeliveryProof {
+  id: string;
+  name: string;
+  fileLink: string;
+  uploadedAt: string;
+}
+
 // Status type
 export type ProcurementStatus =
   | "Review by Procurement"
@@ -104,6 +111,8 @@ export interface ProcurementItem {
   isFixedPrice?: boolean;
   estimatedDeliveryStart?: string;
   estimatedDeliveryEnd?: string;
+  deliveryProofId?: string; // Link to BAST
+  deliveryDate?: string;
 }
 
 export interface ProcurementRequest {
@@ -139,4 +148,5 @@ export interface PurchaseOrder {
   totalAmount: number;
   items: ProcurementItem[]; // Hydrated items
   prNumbers: string[]; // Derived list of PRs
+  deliveryProofs?: DeliveryProof[];
 }

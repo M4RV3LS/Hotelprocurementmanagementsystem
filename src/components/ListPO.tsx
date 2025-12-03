@@ -8,29 +8,24 @@ import {
   Trash2,
   Upload,
   MessageCircle,
+  CheckCircle,
 } from "lucide-react";
-import {
-  purchaseOrdersAPI,
-  procurementRequestsAPI,
-} from "../utils/api"; // Added procurementRequestsAPI import if needed for deep refresh, though mostly handled by props
+import { purchaseOrdersAPI } from "../utils/api";
 import type { PurchaseOrder } from "../data/mockData";
 import UploadSignedPOModal from "./modals/UploadSignedPOModal";
 import POPreviewModal from "./modals/POPreviewModal";
 import ConfirmationModal from "./configuration/ConfirmationModal";
-import Toast from "./Toast"; // Assuming you want Toast feedback
+import Toast from "./Toast";
 
 interface ListPOProps {
-  onRequestsUpdate?: () => void;
+  onRequestsUpdate?: (requests?: any) => void;
 }
 
 export default function ListPO({
   onRequestsUpdate,
 }: ListPOProps = {}) {
-  // Data State
   const [pos, setPos] = useState<PurchaseOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-
-  // UI State
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<string>("all");
@@ -42,7 +37,6 @@ export default function ListPO({
     type: "success" | "error";
   } | null>(null);
 
-  // Action State
   const [selectedPOForUpload, setSelectedPOForUpload] =
     useState<PurchaseOrder | null>(null);
   const [selectedPOForPreview, setSelectedPOForPreview] =
@@ -52,7 +46,6 @@ export default function ListPO({
     poNumber: string;
   } | null>(null);
 
-  // 1. Fetch Data
   const loadPOs = async () => {
     try {
       setIsLoading(true);
@@ -73,7 +66,6 @@ export default function ListPO({
     loadPOs();
   }, []);
 
-  // 2. Get Unique Vendors
   const vendors = useMemo(() => {
     const uniqueVendors = new Set(
       pos.map((po) => po.vendorName).filter(Boolean),
@@ -81,10 +73,8 @@ export default function ListPO({
     return Array.from(uniqueVendors).sort();
   }, [pos]);
 
-  // 3. Filter and Sort
   const filteredAndSortedPOs = useMemo(() => {
     let filtered = [...pos];
-
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -93,18 +83,14 @@ export default function ListPO({
           po.vendorName.toLowerCase().includes(query),
       );
     }
-
-    if (statusFilter !== "all") {
+    if (statusFilter !== "all")
       filtered = filtered.filter(
         (po) => po.status === statusFilter,
       );
-    }
-
-    if (vendorFilter !== "all") {
+    if (vendorFilter !== "all")
       filtered = filtered.filter(
         (po) => po.vendorName === vendorFilter,
       );
-    }
 
     filtered.sort((a, b) => {
       switch (sortBy) {
@@ -128,25 +114,20 @@ export default function ListPO({
           return 0;
       }
     });
-
     return filtered;
   }, [searchQuery, statusFilter, vendorFilter, sortBy, pos]);
 
-  // 4. Action Handlers
-  const handleContactVendor = async (po: PurchaseOrder) => {
-    // Requirement 3: Redirect to Email
+  const handleContactVendor = (po: PurchaseOrder) => {
     if (!po.vendorEmail) {
       alert("No email address found for this vendor.");
       return;
     }
-
     const subject = `Purchase Order ${po.poNumber} - ${po.vendorName}`;
     const body = `Dear ${po.vendorName},\n\nPlease find attached the signed Purchase Order ${po.poNumber}.\n\nBest regards,\nProcurement Team`;
-
-    // Open Mail Client
     window.location.href = `mailto:${po.vendorEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
 
-    // Trigger Status Update (Same logic as before)
+  const handleMarkAsDone = async (po: PurchaseOrder) => {
     try {
       await purchaseOrdersAPI.markAsProcessByVendor(po.id);
       await loadPOs();
@@ -156,41 +137,40 @@ export default function ListPO({
         );
         onRequestsUpdate(freshRequests);
       }
+      setToast({
+        message: "Items marked as 'Process by Vendor'",
+        type: "success",
+      });
     } catch (error) {
-      console.error("Error updating status:", error);
+      console.error(error);
+      setToast({
+        message: "Failed to update status",
+        type: "error",
+      });
     }
   };
 
   const handleDeletePO = async () => {
     if (!deleteConfirm) return;
-
     try {
-      // 1. Call API to Delete PO and Revert Item Statuses
       await purchaseOrdersAPI.delete(deleteConfirm.poId);
-
-      // 2. Remove from Local List immediately for UI responsiveness
       setPos((prev) =>
         prev.filter((p) => p.id !== deleteConfirm.poId),
       );
-
-      // 3. Trigger Global Update
-      // This is crucial: The "List PR" and "Dashboard" need to know that items
-      // are back to "Waiting PO" so they reappear in the Generate PO list.
       if (onRequestsUpdate) {
         const freshRequests = await import("../utils/api").then(
           (m) => m.procurementRequestsAPI.getAll(),
         );
         onRequestsUpdate(freshRequests);
       }
-
       setToast({
-        message: `PO ${deleteConfirm.poNumber} deleted. Items reverted to "Waiting PO".`,
+        message: `PO ${deleteConfirm.poNumber} deleted.`,
         type: "success",
       });
     } catch (error) {
       console.error("Failed to delete PO:", error);
       setToast({
-        message: "Failed to delete PO. Please try again.",
+        message: "Failed to delete PO.",
         type: "error",
       });
     } finally {
@@ -198,7 +178,6 @@ export default function ListPO({
     }
   };
 
-  // ... (formatDate, formatCurrency, getApprovalBadge helpers remain unchanged)
   const formatDate = (date?: string) => {
     if (!date) return "-";
     return new Date(date).toLocaleDateString("en-GB", {
@@ -208,14 +187,13 @@ export default function ListPO({
     });
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("id-ID", {
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("id-ID", {
       style: "currency",
       currency: "IDR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
-  };
 
   const getApprovalBadge = (status: string) => {
     return status === "Approved"
@@ -223,17 +201,20 @@ export default function ListPO({
       : "bg-yellow-100 text-yellow-800 border-yellow-200";
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ec2224]"></div>
-      </div>
+  // Helper to check if any item is already "Process by Vendor"
+  const isProcessByVendor = (po: PurchaseOrder) => {
+    return po.items.some(
+      (i) => i.status === "Process by Vendor",
     );
-  }
+  };
+
+  // Helper to check if any item is "Delivered"
+  const isDelivered = (po: PurchaseOrder) => {
+    return po.items.some((i) => i.status === "Delivered");
+  };
 
   return (
     <div>
-      {/* Header & Filters */}
       <div className="mb-6">
         <div className="flex justify-between items-center mb-4">
           <div>
@@ -287,7 +268,6 @@ export default function ListPO({
         </div>
       </div>
 
-      {/* PO Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 border-b border-gray-200 text-gray-700 font-medium">
@@ -295,6 +275,8 @@ export default function ListPO({
               <th className="px-6 py-4">PO Number</th>
               <th className="px-6 py-4">Date</th>
               <th className="px-6 py-4">Vendor</th>
+              {/* REQ 1: New PO Status Column */}
+              <th className="px-6 py-4">PO Status</th>
               <th className="px-6 py-4">Approval Status</th>
               <th className="px-6 py-4 text-right">Amount</th>
               <th className="px-6 py-4 text-right">Actions</th>
@@ -304,112 +286,143 @@ export default function ListPO({
             {filteredAndSortedPOs.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={7}
                   className="px-6 py-12 text-center text-gray-500"
                 >
                   No Purchase Orders found.
                 </td>
               </tr>
             ) : (
-              filteredAndSortedPOs.map((po) => (
-                <tr
-                  key={po.id}
-                  className="hover:bg-gray-50 transition-colors"
-                >
-                  <td className="px-6 py-4 font-medium text-gray-900">
-                    {po.poNumber}
-                  </td>
-                  <td className="px-6 py-4 text-gray-600">
-                    {formatDate(po.generatedDate)}
-                  </td>
-                  <td className="px-6 py-4 text-gray-900">
-                    {po.vendorName}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getApprovalBadge(po.approvalStatus)}`}
-                    >
-                      {po.approvalStatus}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-right font-medium text-gray-900">
-                    {formatCurrency(po.totalAmount)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex justify-end items-center gap-2">
-                      {/* 1. Upload Signed PO (Req 2) */}
-                      {po.approvalStatus === "Pending" && (
+              filteredAndSortedPOs.map((po) => {
+                const processing = isProcessByVendor(po);
+                const delivered = isDelivered(po);
+                const approved =
+                  po.approvalStatus === "Approved";
+
+                return (
+                  <tr
+                    key={po.id}
+                    className="hover:bg-gray-50 transition-colors"
+                  >
+                    <td className="px-6 py-4 font-medium text-gray-900">
+                      {po.poNumber}
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">
+                      {formatDate(po.generatedDate)}
+                    </td>
+                    <td className="px-6 py-4 text-gray-900">
+                      {po.vendorName}
+                    </td>
+
+                    {/* REQ 1: PO Status Value */}
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${po.status === "Close" ? "bg-gray-100 text-gray-800 border-gray-200" : "bg-green-100 text-green-800 border-green-200"}`}
+                      >
+                        {po.status}
+                      </span>
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${getApprovalBadge(po.approvalStatus)}`}
+                      >
+                        {po.approvalStatus}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-gray-900">
+                      {formatCurrency(po.totalAmount)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-end items-center gap-2">
+                        {/* 1. Upload Signed PO */}
+                        {po.approvalStatus === "Pending" && (
+                          <button
+                            onClick={() =>
+                              setSelectedPOForUpload(po)
+                            }
+                            className="px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 flex items-center gap-1 text-xs font-medium transition-colors"
+                            title="Upload Signed PO"
+                          >
+                            <Upload className="w-3 h-3" /> Sign
+                          </button>
+                        )}
+
+                        {/* REQ 2: Workflow Buttons (Contact & Mark as Done) */}
+                        {approved &&
+                          !processing &&
+                          !delivered && (
+                            <>
+                              <button
+                                onClick={() =>
+                                  handleContactVendor(po)
+                                }
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1 text-xs font-medium transition-colors"
+                                title="Send Email to Vendor"
+                              >
+                                <MessageCircle className="w-3 h-3" />{" "}
+                                Contact
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleMarkAsDone(po)
+                                }
+                                className="px-3 py-1.5 border border-green-600 text-green-600 rounded-md hover:bg-green-50 flex items-center gap-1 text-xs font-medium transition-colors"
+                                title="Mark status as 'Process by Vendor'"
+                              >
+                                <CheckCircle className="w-3 h-3" />{" "}
+                                Mark as Done
+                              </button>
+                            </>
+                          )}
+
+                        {/* REQ 2: Truck Icon Button Removed. Delivery is now handled inside Preview Modal. */}
+
+                        {/* View/Track Button */}
                         <button
                           onClick={() =>
-                            setSelectedPOForUpload(po)
+                            setSelectedPOForPreview(po)
                           }
-                          className="px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 flex items-center gap-1 text-xs font-medium transition-colors"
-                          title="Upload Signed PO"
+                          className="p-2 text-gray-600 hover:text-[#ec2224] hover:bg-gray-100 rounded-md transition-colors"
+                          title="Preview & Delivery Management"
                         >
-                          <Upload className="w-3 h-3" /> Sign
+                          <Eye className="w-4 h-4" />
                         </button>
-                      )}
 
-                      {/* 2. Contact Vendor (Req 3) */}
-                      {po.approvalStatus === "Approved" && (
+                        {po.signedPoLink && (
+                          <a
+                            href={po.signedPoLink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                            title="Download Signed PO"
+                          >
+                            <Download className="w-4 h-4" />
+                          </a>
+                        )}
+
                         <button
                           onClick={() =>
-                            handleContactVendor(po)
+                            setDeleteConfirm({
+                              poId: po.id,
+                              poNumber: po.poNumber,
+                            })
                           }
-                          className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 flex items-center gap-1 text-xs font-medium transition-colors"
-                          title="Send to Vendor"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                          title="Delete"
                         >
-                          <MessageCircle className="w-3 h-3" />{" "}
-                          Contact
+                          <Trash2 className="w-4 h-4" />
                         </button>
-                      )}
-
-                      {/* 3. View PO (Req 4) */}
-                      <button
-                        onClick={() =>
-                          setSelectedPOForPreview(po)
-                        }
-                        className="p-2 text-gray-600 hover:text-[#ec2224] hover:bg-gray-100 rounded-md transition-colors"
-                        title="Preview PO"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-
-                      {/* External Link if exists */}
-                      {po.signedPoLink && (
-                        <a
-                          href={po.signedPoLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                          title="Download Signed PO"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
-                      )}
-
-                      <button
-                        onClick={() =>
-                          setDeleteConfirm({
-                            poId: po.id,
-                            poNumber: po.poNumber,
-                          })
-                        }
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
       </div>
 
-      {/* Modals */}
       {selectedPOForUpload && (
         <UploadSignedPOModal
           po={selectedPOForUpload}
@@ -420,7 +433,6 @@ export default function ListPO({
           }}
         />
       )}
-
       {selectedPOForPreview && (
         <POPreviewModal
           po={selectedPOForPreview}
@@ -428,14 +440,23 @@ export default function ListPO({
         />
       )}
 
+      {/* MarkDeliveredModal removed from here as delivery is now per-item in POPreviewModal */}
+
       {deleteConfirm && (
         <ConfirmationModal
           title="Delete PO?"
-          message={`Delete ${deleteConfirm.poNumber}? This cannot be undone.`}
+          message={`Delete ${deleteConfirm.poNumber}?`}
           confirmLabel="Delete"
           confirmStyle="danger"
           onConfirm={handleDeletePO}
           onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
         />
       )}
     </div>

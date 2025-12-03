@@ -1,9 +1,9 @@
-// src/utils/api.ts
 import { createClient } from "@jsr/supabase__supabase-js";
 import { projectId, publicAnonKey } from "./supabase/info";
 import type {
   ProcurementRequest,
   PurchaseOrder,
+  DeliveryProof,
 } from "../data/mockData";
 
 // Initialize Supabase Client
@@ -16,7 +16,6 @@ const supabase = createClient(
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
   if (row.request_items?.[0]) {
-    // Fallback logic if needed
     return "DKI Jakarta";
   }
   return "DKI Jakarta";
@@ -31,11 +30,8 @@ const mapDBRequestToFrontend = (
     prDate: row.pr_date,
     propertyName: row.property_name,
     propertyCode: row.property_code,
-
-    // REQ 1: Property Type mapped from Header (procurement_requests)
     propertyType: row.property_type || "Leasing",
-
-    brandName: "RedDoorz", // Hardcoded per your mock, or map from DB if exists
+    brandName: "RedDoorz",
     propertyAddress: row.property_address || "",
     picName: row.pic_name || "",
     picNumber: row.pic_number || "",
@@ -76,6 +72,25 @@ const mapDBRequestToFrontend = (
   };
 };
 
+// Helper for Activity Logs
+const logActivity = async (
+  requestId: string,
+  userEmail: string,
+  action: string,
+  details: string,
+) => {
+  const { error } = await supabase
+    .from("activity_logs")
+    .insert({
+      request_id: requestId,
+      user_email: userEmail,
+      action: action,
+      details: details,
+      timestamp: new Date().toISOString(),
+    });
+  if (error) console.error("Failed to log activity:", error);
+};
+
 export const procurementRequestsAPI = {
   getAll: async (): Promise<ProcurementRequest[]> => {
     const { data, error } = await supabase
@@ -103,8 +118,6 @@ export const procurementRequestsAPI = {
     const derivedRegion =
       request.items[0]?.region || "DKI Jakarta";
 
-    // 1. Upsert Header
-    // REQ 1: Saving property_type to procurement_requests
     const { data: prData, error: prError } = await supabase
       .from("procurement_requests")
       .upsert(
@@ -115,10 +128,7 @@ export const procurementRequestsAPI = {
           property_code: request.propertyCode,
           property_address: request.propertyAddress,
           region: derivedRegion,
-
-          // Saving Property Type to Header
           property_type: request.propertyType,
-
           requestor_name: request.requestorName,
           requestor_email: request.requestorEmail,
           pic_name: request.picName,
@@ -134,7 +144,6 @@ export const procurementRequestsAPI = {
     if (prError) throw prError;
     const prId = prData.id;
 
-    // 2. Vendor Map Logic
     const uniqueVendorCodes = Array.from(
       new Set(
         request.items.map((i) => i.vendorCode).filter(Boolean),
@@ -152,7 +161,6 @@ export const procurementRequestsAPI = {
       vendors?.forEach((v) => vendorMap.set(v.code, v.id));
     }
 
-    // 3. Upsert Items
     const itemsToUpsert = request.items.map((item) => {
       const assignedVendorId = item.vendorCode
         ? vendorMap.get(item.vendorCode)
@@ -176,7 +184,6 @@ export const procurementRequestsAPI = {
         po_date: item.poDate ? new Date(item.poDate) : null,
         estimated_delivery_start: item.estimatedDeliveryStart,
         estimated_delivery_end: item.estimatedDeliveryEnd,
-        // REMOVED: property_type from items payload
       };
     });
 
@@ -189,7 +196,6 @@ export const procurementRequestsAPI = {
         console.error("Error saving items:", itemsError);
     }
 
-    // 4. Fetch Fresh Data
     const { data: freshData, error: refreshError } =
       await supabase
         .from("procurement_requests")
@@ -228,6 +234,317 @@ export const procurementRequestsAPI = {
       .delete()
       .eq("pr_number", prNumber);
     if (error) throw error;
+  },
+};
+
+export const purchaseOrdersAPI = {
+  getAll: async (): Promise<PurchaseOrder[]> => {
+    const { data, error } = await supabase
+      .from("purchase_orders")
+      .select(
+        `
+        *,
+        vendor:vendors(name, email, address, contact_person, phone),
+        items:request_items(
+          *,
+          master_items(name, code, category),
+          request:procurement_requests(
+            pr_number,
+            property_name, 
+            property_address, 
+            pic_name, 
+            pic_number
+          )
+        )
+      `,
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    return data.map((po: any) => ({
+      id: po.id,
+      poNumber: po.po_number,
+      generatedDate: po.generated_date,
+      vendorId: po.vendor_id,
+      vendorName: po.vendor?.name || "Unknown",
+      // Extended Vendor Data
+      vendorEmail: po.vendor?.email,
+      vendorAddress: po.vendor?.address,
+      vendorPhone: po.vendor?.phone,
+      vendorContact: po.vendor?.contact_person,
+
+      status: po.status,
+      approvalStatus: po.approval_status,
+      signedPoLink: po.signed_po_link,
+      totalAmount: po.total_amount,
+      deliveryProofs: po.delivery_proofs || [],
+      items: (po.items || []).map((i: any) => ({
+        id: i.id,
+        prNumber: i.request?.pr_number || "PR-LINKED",
+        request_id: i.request_id,
+        itemName: i.master_items?.name || i.item_name_snapshot,
+        quantity: i.quantity,
+        uom: i.uom,
+        unitPrice: i.unit_price,
+        totalPrice: i.total_price,
+        status: i.status,
+        itemCategory: i.master_items?.category || "Ops Item",
+        deliveryProofId: i.delivery_proof_id,
+        // Property Data available in fetch but removed from frontend object per request
+        // propertyName: i.request?.property_name,
+      })),
+      prNumbers: Array.from(
+        new Set((po.items || []).map((i: any) => i.request_id)),
+      ),
+    }));
+  },
+
+  create: async (poData: {
+    poNumber: string;
+    vendorId: string;
+    generatedDate: string;
+    totalAmount: number;
+    items: Array<{
+      id: string;
+      whtPercentage: number;
+      eta: string;
+    }>;
+  }): Promise<void> => {
+    const { data: newPO, error: poError } = await supabase
+      .from("purchase_orders")
+      .insert({
+        po_number: poData.poNumber,
+        vendor_id: poData.vendorId,
+        generated_date: poData.generatedDate,
+        total_amount: poData.totalAmount,
+        status: "Open",
+        approval_status: "Pending",
+      })
+      .select()
+      .single();
+
+    if (poError) throw poError;
+
+    const updates = poData.items.map(async (item) => {
+      const updatePayload: any = {
+        purchase_order_id: newPO.id,
+        po_number: poData.poNumber,
+        po_date: poData.generatedDate,
+        status: "Waiting PO Approval",
+        tax_percentage: item.whtPercentage,
+      };
+
+      if (item.eta) {
+        updatePayload.estimated_delivery_start = item.eta;
+      }
+
+      const { error } = await supabase
+        .from("request_items")
+        .update(updatePayload)
+        .eq("id", item.id);
+
+      if (error) {
+        console.error(
+          `Failed to update item ${item.id}:`,
+          error,
+        );
+        throw error;
+      }
+    });
+
+    await Promise.all(updates);
+  },
+
+  delete: async (poId: string): Promise<void> => {
+    const { error: updateError } = await supabase
+      .from("request_items")
+      .update({
+        status: "Waiting PO",
+        purchase_order_id: null,
+        po_number: null,
+        po_date: null,
+      })
+      .eq("purchase_order_id", poId);
+
+    if (updateError) throw updateError;
+
+    const { error: deleteError } = await supabase
+      .from("purchase_orders")
+      .delete()
+      .eq("id", poId);
+
+    if (deleteError) throw deleteError;
+  },
+
+  uploadSignedPO: async (
+    poId: string,
+    fileLink: string,
+  ): Promise<void> => {
+    const { error } = await supabase
+      .from("purchase_orders")
+      .update({
+        signed_po_link: fileLink,
+        approval_status: "Approved",
+      })
+      .eq("id", poId);
+    if (error) throw error;
+  },
+
+  markAsProcessByVendor: async (
+    poId: string,
+  ): Promise<void> => {
+    const { data: items } = await supabase
+      .from("request_items")
+      .select("id")
+      .eq("purchase_order_id", poId);
+
+    if (!items || items.length === 0) return;
+    const itemIds = items.map((i) => i.id);
+
+    const { error } = await supabase
+      .from("request_items")
+      .update({ status: "Process by Vendor" })
+      .in("id", itemIds);
+
+    if (error) throw error;
+  },
+
+  // Helper to upload file
+  uploadFile: async (
+    file: File,
+    bucket: string,
+    path: string,
+  ): Promise<string> => {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, { upsert: true });
+
+    if (error) {
+      console.error("Storage Error:", error);
+      throw error;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from(bucket)
+      .getPublicUrl(data.path);
+
+    return publicUrlData.publicUrl;
+  },
+
+  // REQ 1: Fixed Filename Sanitization & Bucket
+  addDeliveryProof: async (
+    poId: string,
+    proofData: {
+      name: string;
+      file: File | null;
+      existingLink?: string;
+    },
+  ): Promise<DeliveryProof> => {
+    let fileLink = proofData.existingLink || "";
+
+    if (proofData.file) {
+      // FIX: Strict regex to remove special chars causing "Invalid Key" error
+      // Keeps only alphanumeric, dot, hyphen, underscore.
+      const safeName = proofData.file.name.replace(
+        /[^a-zA-Z0-9.\-_]/g,
+        "_",
+      );
+      const fileName = `${poId}/${Date.now()}_${safeName}`;
+
+      fileLink = await purchaseOrdersAPI.uploadFile(
+        proofData.file,
+        "Delivery Proof", // Explicitly matching your bucket name
+        fileName,
+      );
+    }
+
+    const { data: po, error: fetchError } = await supabase
+      .from("purchase_orders")
+      .select("delivery_proofs")
+      .eq("id", poId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const currentProofs = po.delivery_proofs || [];
+
+    const newProof: DeliveryProof = {
+      id: `proof-${Date.now()}`,
+      name: proofData.name,
+      fileLink: fileLink,
+      uploadedAt: new Date().toISOString(),
+    };
+
+    const updatedProofs = [...currentProofs, newProof];
+
+    const { error: updateError } = await supabase
+      .from("purchase_orders")
+      .update({ delivery_proofs: updatedProofs })
+      .eq("id", poId);
+
+    if (updateError) throw updateError;
+
+    return newProof;
+  },
+
+  updateItemDeliveryStatus: async (
+    itemId: string,
+    requestId: string,
+    poId: string,
+    isDelivered: boolean,
+    proofId?: string,
+    reason?: string,
+  ): Promise<void> => {
+    const updatePayload: any = {
+      status: isDelivered ? "Delivered" : "Process by Vendor",
+      delivery_proof_id: isDelivered ? proofId : null,
+    };
+
+    const { error: itemError } = await supabase
+      .from("request_items")
+      .update(updatePayload)
+      .eq("id", itemId);
+
+    if (itemError) throw itemError;
+
+    const action = isDelivered
+      ? "Item Delivered"
+      : "Delivery Cancelled";
+    const details = isDelivered
+      ? `Item marked as Delivered. Proof ID: ${proofId || "N/A"}`
+      : `Delivery status revoked. Reason: ${reason}`;
+
+    await logActivity(
+      requestId,
+      "System User",
+      action,
+      details,
+    );
+
+    // Check PO Closure
+    const { data: allItems, error: itemsError } = await supabase
+      .from("request_items")
+      .select("status")
+      .eq("purchase_order_id", poId);
+
+    if (itemsError) throw itemsError;
+
+    if (allItems && allItems.length > 0) {
+      const totalItems = allItems.length;
+      const deliveredItems = allItems.filter(
+        (i) => i.status === "Delivered",
+      ).length;
+      const newPOStatus =
+        deliveredItems === totalItems ? "Close" : "Open";
+
+      const { error: poError } = await supabase
+        .from("purchase_orders")
+        .update({ status: newPOStatus })
+        .eq("id", poId);
+
+      if (poError) throw poError;
+    }
   },
 };
 
@@ -459,9 +776,7 @@ export const initializeDatabase = async (data: {
     }
 
     // 2. SEED MASTER ITEMS
-    console.log("Seeding Master Items...");
     const itemMap = new Map<string, string>();
-
     if (data.items?.length) {
       const { data: insertedItems, error } = await supabase
         .from("master_items")
@@ -484,9 +799,7 @@ export const initializeDatabase = async (data: {
     }
 
     // 3. SEED VENDORS
-    console.log("Seeding Vendors...");
     const vendorMap = new Map<string, string>();
-
     if (data.vendors?.length) {
       const vendorsToInsert = data.vendors.map((v) => ({
         code: v.vendorCode,
@@ -542,14 +855,11 @@ export const initializeDatabase = async (data: {
     }
 
     // 5. SEED PROCUREMENT REQUESTS & ITEMS
-    console.log("Seeding Procurement Requests...");
-
     if (data.requests?.length) {
       for (const req of data.requests) {
         const derivedRegion =
           req.items?.[0]?.region || "DKI Jakarta";
 
-        // A. Insert Header
         const { data: prData, error: prError } = await supabase
           .from("procurement_requests")
           .upsert(
@@ -574,7 +884,6 @@ export const initializeDatabase = async (data: {
         if (prError) continue;
         const prId = prData.id;
 
-        // B. Insert Line Items
         if (req.items?.length) {
           const itemsToInsert = req.items.map((item) => {
             const masterItemId = itemMap.get(item.itemCode);
@@ -615,7 +924,6 @@ export const initializeDatabase = async (data: {
             .insert(itemsToInsert);
         }
 
-        // C. Insert Activity Logs
         if (req.activityLog?.length) {
           const logsToInsert = req.activityLog.map((log) => ({
             request_id: prId,
@@ -641,171 +949,4 @@ export const initializeDatabase = async (data: {
     console.error("Critical Seeding Error:", error);
     throw error;
   }
-};
-
-export const purchaseOrdersAPI = {
-  getAll: async (): Promise<PurchaseOrder[]> => {
-    const { data, error } = await supabase
-      .from("purchase_orders")
-      .select(
-        `
-        *,
-        vendor:vendors(name, email, address, contact_person),
-        items:request_items(
-          *,
-          master_items(name, code)
-        )
-      `,
-      )
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    return data.map((po: any) => ({
-      id: po.id,
-      poNumber: po.po_number,
-      generatedDate: po.generated_date,
-      vendorId: po.vendor_id,
-      vendorName: po.vendor?.name || "Unknown",
-      vendorEmail: po.vendor?.email,
-      status: po.status,
-      approvalStatus: po.approval_status,
-      signedPoLink: po.signed_po_link,
-      totalAmount: po.total_amount,
-      items: (po.items || []).map((i: any) => ({
-        id: i.id,
-        prNumber: "PR-LINKED",
-        itemName: i.master_items?.name || i.item_name_snapshot,
-        quantity: i.quantity,
-        uom: i.uom,
-        unitPrice: i.unit_price,
-        totalPrice: i.total_price,
-        status: i.status,
-      })),
-      prNumbers: Array.from(
-        new Set((po.items || []).map((i: any) => i.request_id)),
-      ),
-    }));
-  },
-
-  create: async (poData: {
-    poNumber: string;
-    vendorId: string;
-    generatedDate: string;
-    totalAmount: number;
-    items: Array<{
-      id: string;
-      whtPercentage: number;
-      eta: string;
-    }>;
-  }): Promise<void> => {
-    // 1. Create PO Header
-    const { data: newPO, error: poError } = await supabase
-      .from("purchase_orders")
-      .insert({
-        po_number: poData.poNumber,
-        vendor_id: poData.vendorId,
-        generated_date: poData.generatedDate,
-        total_amount: poData.totalAmount,
-        status: "Open",
-        approval_status: "Pending",
-      })
-      .select()
-      .single();
-
-    if (poError) throw poError;
-
-    // FIX: BUG TRACE - Status not updating
-    // The previous implementation used map() without waiting properly or handling errors robustly.
-    // Also, converting JS Date object to DB Date column often causes issues.
-    // We will use Promise.all and explicit string handling for dates.
-
-    const updates = poData.items.map(async (item) => {
-      const updatePayload: any = {
-        purchase_order_id: newPO.id,
-        po_number: poData.poNumber,
-        po_date: poData.generatedDate,
-
-        // CRITICAL: Explicit status string matching DB default/constraint types
-        status: "Waiting PO Approval",
-
-        tax_percentage: item.whtPercentage,
-      };
-
-      // Safely handle ETA if present
-      if (item.eta) {
-        // Ensure we send YYYY-MM-DD string, not a Date object
-        updatePayload.estimated_delivery_start = item.eta;
-      }
-
-      const { error } = await supabase
-        .from("request_items")
-        .update(updatePayload)
-        .eq("id", item.id);
-
-      if (error) {
-        console.error(
-          `Failed to update item ${item.id}:`,
-          error,
-        );
-        throw error;
-      }
-    });
-
-    await Promise.all(updates);
-  },
-
-  delete: async (poId: string): Promise<void> => {
-    const { error: updateError } = await supabase
-      .from("request_items")
-      .update({
-        status: "Waiting PO",
-        purchase_order_id: null,
-        po_number: null,
-        po_date: null,
-      })
-      .eq("purchase_order_id", poId);
-
-    if (updateError) throw updateError;
-
-    const { error: deleteError } = await supabase
-      .from("purchase_orders")
-      .delete()
-      .eq("id", poId);
-
-    if (deleteError) throw deleteError;
-  },
-
-  uploadSignedPO: async (
-    poId: string,
-    fileLink: string,
-  ): Promise<void> => {
-    const { error } = await supabase
-      .from("purchase_orders")
-      .update({
-        signed_po_link: fileLink,
-        approval_status: "Approved",
-      })
-      .eq("id", poId);
-    if (error) throw error;
-  },
-
-  markAsProcessByVendor: async (
-    poId: string,
-  ): Promise<void> => {
-    const { data: items } = await supabase
-      .from("request_items")
-      .select("id, request_id")
-      .eq("purchase_order_id", poId);
-
-    if (!items || items.length === 0) return;
-    const itemIds = items.map((i) => i.id);
-
-    const { error } = await supabase
-      .from("request_items")
-      .update({ status: "Process by Vendor" })
-      .in("id", itemIds);
-
-    if (error) throw error;
-  },
 };

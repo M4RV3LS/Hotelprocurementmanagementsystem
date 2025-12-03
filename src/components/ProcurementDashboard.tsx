@@ -18,17 +18,25 @@ const statuses: Array<ProcurementStatus | "All"> = [
   "All",
   "Review by Procurement",
   "Waiting PO",
-  "On Process by Vendor",
+  "Waiting PO Approval",
+  "Process by Vendor",
   "Delivered",
+];
+
+const propertyTypes = [
+  "All",
+  "Leasing",
+  "Franchise",
+  "Management",
 ];
 
 interface TableRow {
   prNumber: string;
   propertyName: string;
   propertyCode: string;
+  propertyType: string; // Added propertyType
   status: string;
   itemName: string;
-
   quantity: number;
   uom: string;
   requestDate: string;
@@ -39,7 +47,7 @@ interface TableRow {
 
 interface ProcurementDashboardProps {
   requests?: ProcurementRequest[];
-  vendors?: any[]; // Add this
+  vendors?: any[];
   onRequestsUpdate?: (requests: ProcurementRequest[]) => void;
 }
 
@@ -78,6 +86,8 @@ export default function ProcurementDashboard({
     useState(false);
   const [selectedPRNumberForETA, setSelectedPRNumberForETA] =
     useState<string | null>(null);
+  const [selectedPropertyType, setSelectedPropertyType] =
+    useState("All");
 
   useEffect(() => {
     if (externalRequests) {
@@ -97,9 +107,9 @@ export default function ProcurementDashboard({
           prNumber: request.prNumber,
           propertyName: request.propertyName,
           propertyCode: request.propertyCode,
+          propertyType: request.propertyType,
           status: item.status, // ALWAYS use item status
           itemName: itemDisplay,
-
           quantity: item.quantity,
           uom: item.uom,
           requestDate: request.prDate,
@@ -134,6 +144,13 @@ export default function ProcurementDashboard({
       );
     }
 
+    // REQ 1: Filter by Property Type
+    if (selectedPropertyType !== "All") {
+      filtered = filtered.filter(
+        (row) => row.propertyType === selectedPropertyType,
+      );
+    }
+
     filtered.sort((a, b) => {
       const dateA = new Date(a.requestDate).getTime();
       const dateB = new Date(b.requestDate).getTime();
@@ -143,7 +160,13 @@ export default function ProcurementDashboard({
     });
 
     return filtered;
-  }, [searchQuery, selectedStatuses, sortOrder, tableRows]);
+  }, [
+    searchQuery,
+    selectedStatuses,
+    selectedPropertyType,
+    sortOrder,
+    tableRows,
+  ]);
 
   const toggleStatus = (status: string) => {
     setSelectedStatuses((prev) =>
@@ -178,7 +201,6 @@ export default function ProcurementDashboard({
       message: `Request updated successfully`,
       type: "success",
     });
-
     setHighlightedPRNumber(updatedRequest.prNumber);
     setTimeout(() => setHighlightedPRNumber(null), 2000);
     setTimeout(() => setToast(null), 5000);
@@ -198,27 +220,22 @@ export default function ProcurementDashboard({
       index < filteredData.length - 1
         ? filteredData[index + 1]
         : null;
-
     const samePRAsPrev =
       prevRow && prevRow.prNumber === row.prNumber;
     const samePRAsNext =
       nextRow && nextRow.prNumber === row.prNumber;
-
     const isHighlighted = highlightedPRNumber === row.prNumber;
 
     let baseClass = "transition-all duration-500";
-
     if (isHighlighted) {
       baseClass += " bg-yellow-50";
     } else {
       baseClass += " hover:bg-gray-50";
     }
-
     if (samePRAsPrev || samePRAsNext) {
       baseClass +=
         " bg-red-50/20 border-l-4 border-l-[#ec2224]";
     }
-
     return baseClass;
   };
 
@@ -289,6 +306,20 @@ export default function ProcurementDashboard({
                 </>
               )}
             </div>
+
+            <select
+              value={selectedPropertyType}
+              onChange={(e) =>
+                setSelectedPropertyType(e.target.value)
+              }
+              className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+            >
+              {propertyTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
 
             <div className="flex-1 min-w-[300px] relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
