@@ -3,18 +3,21 @@ import { Edit2 } from "lucide-react";
 import type {
   ProcurementItem,
   PaymentTerms,
+  PropertyType,
 } from "../../data/mockData";
 
 interface ItemDetailSectionProps {
   item: ProcurementItem;
   requestStatus: string;
-  vendors: any[]; // Add this
+  requestPropertyType: PropertyType; // NEW PROP
+  vendors: any[];
   onUpdate: (updatedItem: Partial<ProcurementItem>) => void;
 }
 
 export default function ItemDetailSection({
   item,
   requestStatus,
+  requestPropertyType, // Receive the prop
   vendors,
   onUpdate,
 }: ItemDetailSectionProps) {
@@ -42,19 +45,37 @@ export default function ItemDetailSection({
     return vendors.filter((vendor) => {
       const isActive = vendor.isActive;
 
-      // Handle Region Match
+      // Handle Region Match (Header Level)
       const hasRegion = Array.isArray(vendor.vendorRegion)
         ? vendor.vendorRegion.includes(item.region)
         : vendor.vendorRegion === item.region;
 
-      // Handle Item Match
-      const hasItem = vendor.items.some(
-        (vi) => vi.itemCode === item.itemCode,
+      // Handle Item Match & Property Type Match (Item Level)
+      const validVendorItem = vendor.items?.find(
+        (vi: any) => vi.itemCode === item.itemCode,
       );
 
-      return isActive && hasRegion && hasItem;
+      // 1. Vendor must sell this item
+      const hasItem = !!validVendorItem;
+
+      // 2. Vendor's item must support the Request's Property Type
+      // We use the passed prop 'requestPropertyType' instead of item.propertyType
+      const hasPropertyTypeMatch = validVendorItem
+        ? validVendorItem.propertyTypes?.includes(
+            requestPropertyType,
+          )
+        : false;
+
+      return (
+        isActive && hasRegion && hasItem && hasPropertyTypeMatch
+      );
     });
-  }, [item.region, item.itemCode]);
+  }, [
+    item.region,
+    item.itemCode,
+    requestPropertyType,
+    vendors,
+  ]); // Updated dependency
 
   const getItemStatusBadge = (itemStatus: string) => {
     const colors = {
@@ -76,7 +97,7 @@ export default function ItemDetailSection({
     );
 
     const vendorItem = vendor?.items.find(
-      (vi) => vi.itemCode === item.itemCode,
+      (vi: any) => vi.itemCode === item.itemCode,
     );
 
     let updatedItem: Partial<ProcurementItem> = {
@@ -256,8 +277,13 @@ export default function ItemDetailSection({
                 </select>
                 {filteredVendors.length === 0 && (
                   <p className="text-sm text-red-500 mt-1">
-                    No vendors found for item "{item.itemName}"
-                    in {item.region}.
+                    No eligible vendors found.
+                    <br />
+                    <span className="text-xs text-gray-500">
+                      Check: Region ({item.region}), Item
+                      Mapping, and Property Type (
+                      {requestPropertyType}) compatibility.
+                    </span>
                   </p>
                 )}
               </div>

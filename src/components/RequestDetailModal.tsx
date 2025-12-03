@@ -5,7 +5,6 @@ import type {
   ProcurementItem,
   ActivityLog,
 } from "../data/mockData";
-// StatusStepper is removed as requested
 import ItemDetailSection from "./request-detail/ItemDetailSection";
 import LogActivity from "./request-detail/LogActivity";
 
@@ -78,13 +77,11 @@ export default function RequestDetailModal({
       }
 
       // Auto-Transition Item Status to "Waiting PO"
-      // Condition: Currently "Review by Procurement" AND has Vendor AND has Price > 0
       if (
         newItem.status === "Review by Procurement" &&
         newItem.vendorName &&
         (newItem.totalPrice || 0) > 0
       ) {
-        // Update JUST this item's status
         nextRequest.items = nextRequest.items.map((i) =>
           i.id === itemId ? { ...i, status: "Waiting PO" } : i,
         );
@@ -100,9 +97,6 @@ export default function RequestDetailModal({
     setCurrentRequest(nextRequest);
     onUpdate(nextRequest);
   };
-
-  // handleStatusChange removed as manual status overrides should be rare or handled per item inside ItemDetailSection if needed.
-  // The requirement was "auto transition", which is handled above.
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString("en-GB", {
@@ -134,8 +128,6 @@ export default function RequestDetailModal({
             </button>
           </div>
 
-          {/* Removed Top-Level Status Stepper */}
-
           <div className="px-8 py-6 space-y-8">
             {/* Property Information */}
             <div>
@@ -163,17 +155,8 @@ export default function RequestDetailModal({
                   <div>
                     <span className="text-gray-600">
                       Property Type:
-                    </span>
-                    {/* REQUIREMENT 1.3: Displaying Value from Table procurement_requests */}
-                    <div className="text-gray-900 font-medium">
-                      {currentRequest.propertyType}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">
-                      Property Type:
                     </span>{" "}
-                    <div className="text-gray-900">
+                    <div className="text-gray-900 font-medium">
                       {currentRequest.propertyType}
                     </div>
                   </div>
@@ -210,7 +193,6 @@ export default function RequestDetailModal({
                     </div>
                   </div>
                 </div>
-                {/* Removed Request Level Status Badge */}
               </div>
             </div>
 
@@ -226,7 +208,6 @@ export default function RequestDetailModal({
                     {currentRequest.items.length}
                   </h3>
                   <div className="flex items-center gap-4">
-                    {/* Display Item Status Here */}
                     <span
                       className={`px-3 py-1 rounded-full text-sm font-medium border ${
                         item.status === "Waiting PO"
@@ -249,8 +230,12 @@ export default function RequestDetailModal({
 
                 <ItemDetailSection
                   item={item}
-                  vendors={vendors} // PASS IT HERE
+                  vendors={vendors}
                   requestStatus={item.status}
+                  // FIXED: Passed requestPropertyType
+                  requestPropertyType={
+                    currentRequest.propertyType
+                  }
                   onUpdate={(updatedItem) =>
                     handleItemUpdate(item.id, updatedItem)
                   }
@@ -258,14 +243,13 @@ export default function RequestDetailModal({
               </div>
             ))}
 
-            {/* Document Links (if any items have POs) */}
+            {/* Document Links */}
             {currentRequest.items.some((i) => i.poNumber) && (
               <div>
                 <h3 className="text-gray-900 mb-4 border-b-2 border-[#ec2224] pb-2">
                   DOCUMENT LINKS
                 </h3>
                 <div className="bg-gray-50 rounded-lg p-6 space-y-2">
-                  {/* Unique POs for this request */}
                   {Array.from(
                     new Set(
                       currentRequest.items

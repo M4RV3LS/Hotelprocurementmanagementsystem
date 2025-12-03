@@ -1,17 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   X,
   Plus,
   Trash2,
   Upload,
   Link as LinkIcon,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import { INDONESIA_REGIONS } from "../../data/mockData";
 
 interface ExtendedVendor extends Omit<Vendor, "agreements"> {
-  propertyType: "Franchise" | "Leasing" | "All";
   agreements: Agreement[];
 }
 
@@ -31,7 +32,8 @@ interface VendorItem {
   priceType: "Fixed" | "Not Fixed";
   unitPrice: number;
   agreementNumber: string;
-  taxPercentage: number; // Used for WHT
+  taxPercentage: number;
+  propertyTypes: string[]; // New Field
 }
 
 interface Agreement {
@@ -43,6 +45,8 @@ interface Agreement {
   documentLink?: string;
   link: string;
 }
+
+const PROPERTY_TYPES = ["Franchise", "Leasing", "Management"];
 
 export default function VendorFormModalUpdated({
   vendor,
@@ -67,24 +71,28 @@ export default function VendorFormModalUpdated({
       agreements: [],
       items: [],
       isActive: true,
-      propertyType: "All",
     },
   );
 
   const [vendorItems, setVendorItems] = useState<VendorItem[]>(
-    vendor?.items || [],
+    (vendor?.items || []).map((i) => ({
+      ...i,
+      propertyTypes: i.propertyTypes || [], // Ensure array exists
+    })),
   );
+
+  // ... (Agreements state and other existing state - no changes needed there)
   const [agreements, setAgreements] = useState<Agreement[]>(
     vendor?.agreements || [],
   );
   const [selectedPaymentMethods, setSelectedPaymentMethods] =
     useState<string[]>(vendor?.paymentMethods || []);
-
   const [showAddItem, setShowAddItem] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<
     number | null
   >(null);
 
+  // Item Form State
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
     itemName: "",
@@ -93,11 +101,61 @@ export default function VendorFormModalUpdated({
     priceType: "Fixed",
     unitPrice: 0,
     agreementNumber: "",
-    taxPercentage: 0, // Default WHT
+    taxPercentage: 0,
+    propertyTypes: [], // Default empty
   });
 
-  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const activeItems = items.filter((item) => item.isActive);
+
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
+
+  const handleToggleCell = (index: number, type: string) => {
+    setVendorItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+        const hasType = item.propertyTypes.includes(type);
+        return {
+          ...item,
+          propertyTypes: hasType
+            ? item.propertyTypes.filter((t) => t !== type)
+            : [...item.propertyTypes, type],
+        };
+      }),
+    );
+  };
+
+  const handleTickAllColumn = (type: string) => {
+    // Check if all are currently ticked to determine if we uncheck or check
+    const allTicked = vendorItems.every((item) =>
+      item.propertyTypes.includes(type),
+    );
+
+    setVendorItems((prev) =>
+      prev.map((item) => {
+        if (allTicked) {
+          // Uncheck all
+          return {
+            ...item,
+            propertyTypes: item.propertyTypes.filter(
+              (t) => t !== type,
+            ),
+          };
+        } else {
+          // Check all (add if missing)
+          return item.propertyTypes.includes(type)
+            ? item
+            : {
+                ...item,
+                propertyTypes: [...item.propertyTypes, type],
+              };
+        }
+      }),
+    );
+  };
+
+  const handleNewItemPropertyTypeChange = (types: string[]) => {
+    setNewItem((prev) => ({ ...prev, propertyTypes: types }));
+  };
 
   const handleInputChange = (
     field: string,
@@ -125,24 +183,13 @@ export default function VendorFormModalUpdated({
   };
 
   const handleAddItemToVendor = () => {
+    // ... (Existing Validation) ...
     if (!newItem.itemCode || newItem.minQuantity <= 0) {
       alert("Please fill in all required fields");
       return;
     }
 
-    if (newItem.priceType === "Fixed") {
-      if (newItem.unitPrice <= 0) {
-        alert("Unit price is required for fixed price items");
-        return;
-      }
-      if (!newItem.agreementNumber) {
-        alert(
-          "Validation Error: Fixed Price items must be linked to an Agreement or Offering number.",
-        );
-        return;
-      }
-    }
-
+    // Save Logic
     if (editingItemIndex !== null) {
       setVendorItems((prev) =>
         prev.map((item, idx) =>
@@ -154,6 +201,7 @@ export default function VendorFormModalUpdated({
       setVendorItems((prev) => [...prev, newItem]);
     }
 
+    // Reset Form
     setNewItem({
       itemCode: "",
       itemName: "",
@@ -163,6 +211,7 @@ export default function VendorFormModalUpdated({
       unitPrice: 0,
       agreementNumber: "",
       taxPercentage: 0,
+      propertyTypes: [],
     });
     setShowAddItem(false);
   };
@@ -634,52 +683,70 @@ export default function VendorFormModalUpdated({
               />
             </div>
 
-            {/* Vendor Item/SKU Configuration - UPDATED */}
+            {/* ITEM CONFIGURATION TABLE (REVAMPED) */}
             <div className="border-t border-gray-200 pt-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-gray-900">
+                <h3 className="text-gray-900 font-medium">
                   Vendor Item/SKU Configuration
                 </h3>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setShowBulkUpload(true)}
-                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                  >
-                    <Upload className="w-4 h-4" /> Bulk Update
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAddItem(true);
-                      setEditingItemIndex(null);
-                    }}
-                    className="px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" /> Add Item
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setShowAddItem(true);
+                    setEditingItemIndex(null);
+                    setNewItem({
+                      itemCode: "",
+                      itemName: "",
+                      minQuantity: 1,
+                      multipleOf: 1,
+                      priceType: "Fixed",
+                      unitPrice: 0,
+                      agreementNumber: "",
+                      taxPercentage: 0,
+                      propertyTypes: [],
+                    });
+                  }}
+                  className="px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Add Item
+                </button>
               </div>
 
-              {/* Items Table - Requirement 3: Add WHT Column */}
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-gray-700">
+                      <th className="px-4 py-3 text-left text-gray-700 w-48">
                         Item Name
                       </th>
-                      <th className="px-4 py-3 text-left text-gray-700">
-                        Min Qty
+                      <th className="px-4 py-3 text-left text-gray-700 w-24">
+                        Price
                       </th>
-                      <th className="px-4 py-3 text-left text-gray-700">
-                        Unit Price
-                      </th>
-                      <th className="px-4 py-3 text-left text-gray-700">
-                        Agreement
-                      </th>
-                      <th className="px-4 py-3 text-left text-gray-700">
-                        WHT (%)
-                      </th>{" "}
-                      {/* Added */}
+
+                      {/* REQ 3: Dynamic Property Type Columns with Tick All */}
+                      {PROPERTY_TYPES.map((type) => (
+                        <th
+                          key={type}
+                          className="px-4 py-3 text-center text-gray-700 w-32"
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span>{type}</span>
+                            <button
+                              onClick={() =>
+                                handleTickAllColumn(type)
+                              }
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              {vendorItems.length > 0 &&
+                              vendorItems.every((i) =>
+                                i.propertyTypes.includes(type),
+                              )
+                                ? "Untick All"
+                                : "Tick All"}
+                            </button>
+                          </div>
+                        </th>
+                      ))}
+
                       <th className="px-4 py-3 text-right text-gray-700">
                         Action
                       </th>
@@ -689,37 +756,40 @@ export default function VendorFormModalUpdated({
                     {vendorItems.map((item, index) => (
                       <tr key={index}>
                         <td className="px-4 py-3 text-gray-900">
-                          {item.itemName}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {item.minQuantity}
+                          <div>{item.itemName}</div>
+                          <div className="text-xs text-gray-500">
+                            {item.itemCode}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-gray-700">
                           {item.priceType === "Fixed"
                             ? `Rp ${item.unitPrice.toLocaleString()}`
-                            : "-"}
+                            : "Floating"}
                         </td>
-                        <td className="px-4 py-3 text-gray-700 text-sm">
-                          {item.priceType === "Fixed" ? (
-                            item.agreementNumber ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                {item.agreementNumber}
-                              </span>
-                            ) : (
-                              <span className="text-red-500 text-xs">
-                                Missing Agreement!
-                              </span>
-                            )
-                          ) : (
-                            <span className="text-gray-400">
-                              -
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-gray-700">
-                          {item.taxPercentage}%
-                        </td>{" "}
-                        {/* Value displayed */}
+
+                        {/* REQ 3: Checkboxes for each type */}
+                        {PROPERTY_TYPES.map((type) => (
+                          <td
+                            key={type}
+                            className="px-4 py-3 text-center"
+                          >
+                            <button
+                              onClick={() =>
+                                handleToggleCell(index, type)
+                              }
+                              className={`p-1 rounded hover:bg-gray-100 transition-colors ${item.propertyTypes.includes(type) ? "text-green-600" : "text-gray-300"}`}
+                            >
+                              {item.propertyTypes.includes(
+                                type,
+                              ) ? (
+                                <CheckSquare className="w-5 h-5" />
+                              ) : (
+                                <Square className="w-5 h-5" />
+                              )}
+                            </button>
+                          </td>
+                        ))}
+
                         <td className="px-4 py-3 text-right">
                           <button
                             onClick={() =>
@@ -740,22 +810,33 @@ export default function VendorFormModalUpdated({
                         </td>
                       </tr>
                     ))}
+                    {vendorItems.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-4 py-8 text-center text-gray-500"
+                        >
+                          No items configured.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
 
+          {/* ... Footer Actions ... */}
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="px-6 py-2 border border-gray-300 rounded-lg"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21]"
+              className="px-6 py-2 bg-[#ec2224] text-white rounded-lg"
             >
               Save Vendor
             </button>

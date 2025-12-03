@@ -9,7 +9,7 @@ import type {
 // Initialize Supabase Client
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
-  publicAnonKey
+  publicAnonKey,
 );
 
 // Helper function to determine region from a procurement request row
@@ -271,6 +271,7 @@ export const vendorsAPI = {
         minQuantity: vi.min_quantity,
         agreementNumber: vi.agreement_number,
         taxPercentage: vi.wht_percentage || 0,
+        propertyTypes: vi.property_types || [],
       })),
     }));
   },
@@ -295,7 +296,6 @@ export const vendorsAPI = {
               vendor.serviceChargePercentage,
             is_active: vendor.isActive,
             agreement_link: vendor.vendorAgreementLink,
-            property_type: vendor.propertyType,
             agreements: vendor.agreements,
           },
           { onConflict: "code" },
@@ -333,6 +333,7 @@ export const vendorsAPI = {
             min_quantity: vItem.minQuantity,
             agreement_number: vItem.agreementNumber,
             wht_percentage: vItem.taxPercentage,
+            property_types: vItem.propertyTypes || [],
           };
         })
         .filter((i: any) => i !== null);

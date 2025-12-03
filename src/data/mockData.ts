@@ -27,7 +27,10 @@ export type POApprovalStatus = "Pending" | "Approved";
 
 export type ItemStatus = "Not Set" | "Cancelled" | "Ready";
 
-export type PropertyType = "Leasing" | "Franchise";
+export type PropertyType =
+  | "Leasing"
+  | "Franchise"
+  | "Management";
 
 export type PaymentTerms =
   | "Cash Before Delivery"
