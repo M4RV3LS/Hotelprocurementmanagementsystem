@@ -15,6 +15,7 @@ import ConfirmationModal from "./ConfirmationModal";
 
 interface ExtendedVendor extends Omit<Vendor, "agreements"> {
   agreements: Agreement[];
+  deliveryFee?: number; // Requirement 2: Added Type Definition
 }
 
 interface VendorFormModalProps {
@@ -34,7 +35,7 @@ interface VendorItem {
   unitPrice: number;
   agreementNumber: string;
   taxPercentage: number;
-  propertyTypes: string[]; // New Field
+  propertyTypes: string[];
 }
 
 interface Agreement {
@@ -68,6 +69,7 @@ export default function VendorFormModalUpdated({
       ppnPercentage: 11,
       serviceChargePercentage: 0,
       pb1Percentage: 0,
+      deliveryFee: 0, // Requirement 2: Initialize
       paymentMethods: [],
       agreements: [],
       items: [],
@@ -78,11 +80,10 @@ export default function VendorFormModalUpdated({
   const [vendorItems, setVendorItems] = useState<VendorItem[]>(
     (vendor?.items || []).map((i) => ({
       ...i,
-      propertyTypes: i.propertyTypes || [], // Ensure array exists
+      propertyTypes: i.propertyTypes || [],
     })),
   );
 
-  // ... (Agreements state and other existing state - no changes needed there)
   const [agreements, setAgreements] = useState<Agreement[]>(
     vendor?.agreements || [],
   );
@@ -101,7 +102,6 @@ export default function VendorFormModalUpdated({
     itemToAdd: null,
   });
 
-  // Item Form State
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
     itemName: "",
@@ -111,11 +111,12 @@ export default function VendorFormModalUpdated({
     unitPrice: 0,
     agreementNumber: "",
     taxPercentage: 0,
-    propertyTypes: [], // Default empty
+    propertyTypes: [],
   });
 
   const activeItems = items.filter((item) => item.isActive);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [showBulkUpload, setShowBulkUpload] = useState(false);
 
   const handleToggleCell = (index: number, type: string) => {
@@ -161,6 +162,7 @@ export default function VendorFormModalUpdated({
     );
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleNewItemPropertyTypeChange = (types: string[]) => {
     setNewItem((prev) => ({ ...prev, propertyTypes: types }));
   };
@@ -186,19 +188,17 @@ export default function VendorFormModalUpdated({
         unitPrice: 0,
         agreementNumber: "",
         taxPercentage: 0,
-        propertyTypes: [], // Initialize as empty array
+        propertyTypes: [],
       });
     }
   };
 
   const handleAddItemToVendor = () => {
-    // ... (Existing Validation) ...
     if (!newItem.itemCode || newItem.minQuantity <= 0) {
       alert("Please fill in all required fields");
       return;
     }
 
-    // Save Logic
     if (editingItemIndex !== null) {
       setVendorItems((prev) =>
         prev.map((item, idx) =>
@@ -210,7 +210,6 @@ export default function VendorFormModalUpdated({
       setVendorItems((prev) => [...prev, newItem]);
     }
 
-    // Reset Form
     setNewItem({
       itemCode: "",
       itemName: "",
@@ -225,6 +224,7 @@ export default function VendorFormModalUpdated({
     setShowAddItem(false);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const attemptAddItem = () => {
     if (!newItem.itemCode || newItem.minQuantity <= 0) {
       alert(
@@ -233,8 +233,6 @@ export default function VendorFormModalUpdated({
       return;
     }
 
-    // Check if item already exists in the list
-    // We skip this check if we are EDITING the same row (index matches)
     const isDuplicate = vendorItems.some(
       (item, index) =>
         item.itemCode === newItem.itemCode &&
@@ -242,13 +240,11 @@ export default function VendorFormModalUpdated({
     );
 
     if (isDuplicate) {
-      // Trigger Warning Modal
       setDuplicateWarning({
         isOpen: true,
         itemToAdd: newItem,
       });
     } else {
-      // No duplicate, add directly
       commitItemAdd(newItem);
     }
   };
@@ -265,7 +261,6 @@ export default function VendorFormModalUpdated({
       setVendorItems((prev) => [...prev, itemToCommit]);
     }
 
-    // Reset Form
     setNewItem({
       itemCode: "",
       itemName: "",
@@ -493,9 +488,9 @@ export default function VendorFormModalUpdated({
 
             <div className="border-t border-gray-200 pt-6">
               <h3 className="text-gray-900 mb-4">
-                Tax Configuration
+                Tax & Fees Configuration
               </h3>
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <div>
                   <label className="block text-gray-700 mb-2">
                     PPN (%){" "}
@@ -548,11 +543,29 @@ export default function VendorFormModalUpdated({
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg"
                   />
                 </div>
+                {/* Requirement 2: Delivery Fee Field */}
+                <div>
+                  <label className="block text-gray-700 mb-2">
+                    Delivery Fee (Flat)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.deliveryFee}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "deliveryFee",
+                        parseFloat(e.target.value) || 0,
+                      )
+                    }
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    placeholder="0"
+                  />
+                </div>
               </div>
             </div>
 
             <div className="border-t border-gray-200 pt-6">
-              {/* ... Agreement Section (Keep existing code) ... */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900">
                   Agreement / Offering Information
@@ -726,7 +739,6 @@ export default function VendorFormModalUpdated({
               />
             </div>
 
-            {/* ITEM CONFIGURATION TABLE (REVAMPED) */}
             <div className="border-t border-gray-200 pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900 font-medium">
@@ -765,7 +777,6 @@ export default function VendorFormModalUpdated({
                         Price
                       </th>
 
-                      {/* REQ 3: Dynamic Property Type Columns with Tick All */}
                       {PROPERTY_TYPES.map((type) => (
                         <th
                           key={type}
@@ -810,7 +821,6 @@ export default function VendorFormModalUpdated({
                             : "Floating"}
                         </td>
 
-                        {/* REQ 3: Checkboxes for each type */}
                         {PROPERTY_TYPES.map((type) => (
                           <td
                             key={type}
@@ -869,7 +879,6 @@ export default function VendorFormModalUpdated({
             </div>
           </div>
 
-          {/* ... Footer Actions ... */}
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3">
             <button
               onClick={onClose}
@@ -906,7 +915,6 @@ export default function VendorFormModalUpdated({
           />
         )}
 
-      {/* Add/Edit Item Modal */}
       {showAddItem && (
         <>
           <div

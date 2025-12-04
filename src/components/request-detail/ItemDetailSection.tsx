@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Edit2 } from "lucide-react";
+import { Edit2, FileText } from "lucide-react";
 import type {
   ProcurementItem,
   PaymentTerms,
@@ -164,6 +164,12 @@ export default function ItemDetailSection({
     requestStatus === "Review by Procurement" ||
     requestStatus === "Waiting PO";
 
+  const shouldShowPO = [
+    "Waiting PO Approval",
+    "Process by Vendor",
+    "Delivered",
+  ].includes(item.status);
+
   return (
     <div className="space-y-6">
       {/* Item Details */}
@@ -180,6 +186,17 @@ export default function ItemDetailSection({
               {item.itemName}
             </span>
           </div>
+
+          {shouldShowPO && item.poNumber && (
+            <div className="flex gap-6 items-center bg-blue-50 p-2 rounded-md -mx-2 px-4 border border-blue-100">
+              <span className="text-blue-800 font-semibold w-48 flex items-center gap-2">
+                <FileText className="w-4 h-4" /> Linked PO:
+              </span>
+              <span className="text-blue-900 font-bold font-mono">
+                {item.poNumber}
+              </span>
+            </div>
+          )}
 
           <div className="flex gap-6">
             <span className="text-gray-600 w-48">Region:</span>

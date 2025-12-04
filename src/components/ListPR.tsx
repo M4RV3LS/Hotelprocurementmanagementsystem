@@ -34,7 +34,10 @@ export default function ListPR({
 
   // Filter and sort PR list
   const filteredAndSortedPRs = useMemo(() => {
-    let filtered = [...requests];
+    // Start by filtering out "Pending Approval" items (Requirement 1)
+    let filtered = requests.filter(
+      (pr) => pr.status !== "Pending Approval",
+    );
 
     // Search filter
     if (searchQuery) {

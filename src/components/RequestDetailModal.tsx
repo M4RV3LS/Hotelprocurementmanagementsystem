@@ -7,6 +7,7 @@ import type {
 } from "../data/mockData";
 import ItemDetailSection from "./request-detail/ItemDetailSection";
 import LogActivity from "./request-detail/LogActivity";
+import { procurementRequestsAPI } from "../utils/api"; // Import API
 
 interface RequestDetailModalProps {
   request: ProcurementRequest;
@@ -24,13 +25,28 @@ export default function RequestDetailModal({
   const [currentRequest, setCurrentRequest] =
     useState<ProcurementRequest>(request);
 
+  // Requirement 2: Function to sync log to Database
+  const saveLogToDB = async (
+    action: string,
+    details: string,
+  ) => {
+    // In a real app, you would define user info from context
+    const userEmail = "system@reddoorz.com";
+    await procurementRequestsAPI.logActivity(
+      currentRequest.prNumber,
+      userEmail,
+      action,
+      details,
+    );
+  };
+
   const addLog = (
     req: ProcurementRequest,
     action: string,
     details: string,
   ): ProcurementRequest => {
     const newLog: ActivityLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       user: "System",
       action: action,
@@ -63,34 +79,80 @@ export default function RequestDetailModal({
       (i) => i.id === itemId,
     );
 
-    if (newItem) {
-      // Vendor Assignment Log
+    if (newItem && oldItem) {
+      // Requirement 2.2: Log Vendor Assignment
       if (
         updatedItem.vendorName &&
-        updatedItem.vendorName !== oldItem?.vendorName
+        updatedItem.vendorName !== oldItem.vendorName
       ) {
+        const details = `Assigned Vendor: ${updatedItem.vendorName}`;
         nextRequest = addLog(
           nextRequest,
-          "Item Update",
-          `Vendor "${updatedItem.vendorName}" assigned to item: ${newItem.itemName}`,
+          "Vendor Assignment",
+          details,
         );
+        saveLogToDB("Vendor Assignment", details);
       }
 
-      // Auto-Transition Item Status to "Waiting PO"
+      // Requirement 2.2: Log Payment Method
+      if (
+        updatedItem.paymentTerms &&
+        updatedItem.paymentTerms !== oldItem.paymentTerms
+      ) {
+        const details = `Payment Terms set to: ${updatedItem.paymentTerms}`;
+        nextRequest = addLog(
+          nextRequest,
+          "Payment Method Update",
+          details,
+        );
+        saveLogToDB("Payment Method Update", details);
+      }
+
+      // Requirement 2.1: Log Status Changes
+      // Only log specific statuses requested
+      const loggableStatuses = [
+        "Review by Procurement",
+        "Waiting PO",
+        "Waiting PO Approval",
+        "Process by Vendor",
+        "Delivered",
+        "Closed",
+        "Cancelled by Procurement",
+      ];
+
+      // Check if status changed or if it was auto-transitioned
+      let statusChanged =
+        updatedItem.status &&
+        updatedItem.status !== oldItem.status;
+
+      // Auto-Transition Logic (Existing)
       if (
         newItem.status === "Review by Procurement" &&
         newItem.vendorName &&
         (newItem.totalPrice || 0) > 0
       ) {
+        // Force update for auto-transition
         nextRequest.items = nextRequest.items.map((i) =>
           i.id === itemId ? { ...i, status: "Waiting PO" } : i,
         );
+        statusChanged = true;
+      }
 
+      // Final status check after potential auto-transition
+      const finalItem = nextRequest.items.find(
+        (i) => i.id === itemId,
+      )!;
+      if (
+        finalItem.status !== oldItem.status &&
+        loggableStatuses.includes(finalItem.status)
+      ) {
+        const details = `Status changed from "${oldItem.status}" to "${finalItem.status}"`;
         nextRequest = addLog(
           nextRequest,
           "Status Change",
-          `Item "${newItem.itemName}" status updated to "Waiting PO" (Vendor & Price configured)`,
+          details,
         );
+        saveLogToDB("Status Change", details);
       }
     }
 
@@ -289,7 +351,7 @@ export default function RequestDetailModal({
               </div>
             </div>
           </div>
-
+          {/* Footer */}
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-6 flex justify-end gap-3">
             <button
               onClick={onClose}

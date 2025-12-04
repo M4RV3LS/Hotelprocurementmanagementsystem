@@ -73,6 +73,10 @@ const mapDBRequestToFrontend = (
     requestorName: row.requestor_name,
     requestorEmail: row.requestor_email,
     status: row.status,
+    // @ts-ignore - Assuming note exists in DB but might not be in type yet
+    note: row.note || "",
+    // Added mapping for poFileLink
+    poFileLink: row.po_file_link || "",
     items: (row.request_items || []).map((item: any) => ({
       id: item.id,
       prNumber: row.pr_number,
@@ -96,6 +100,8 @@ const mapDBRequestToFrontend = (
       poDate: item.po_date,
       estimatedDeliveryStart: item.estimated_delivery_start,
       estimatedDeliveryEnd: item.estimated_delivery_end,
+      // Handle legacy single ID or new JSON array of IDs
+      deliveryProofId: item.delivery_proof_id,
     })),
     activityLog: (row.activity_logs || []).map((log: any) => ({
       id: log.id,
@@ -107,8 +113,8 @@ const mapDBRequestToFrontend = (
   };
 };
 
-// Helper for Activity Logs
-const logActivity = async (
+// Internal Helper for Activity Logs
+const _logActivityInternal = async (
   requestId: string,
   userEmail: string,
   action: string,
@@ -250,6 +256,62 @@ export const procurementRequestsAPI = {
 
     if (refreshError) throw refreshError;
     return mapDBRequestToFrontend(freshData);
+  },
+
+  // Requirement 2 & 5: Update PR Header Status and Note
+  updateStatus: async (
+    prNumber: string,
+    status: string,
+    note?: string,
+  ) => {
+    const payload: any = { status };
+    if (note) payload.note = note; // Ensure 'note' column exists in DB
+    const { error } = await supabase
+      .from("procurement_requests")
+      .update(payload)
+      .eq("pr_number", prNumber);
+    if (error) throw error;
+  },
+
+  // Requirement 5: Update all items status when PR is Approved/Rejected
+  updateAllItemsStatus: async (
+    prNumber: string,
+    status: string,
+  ) => {
+    // Get ID first
+    const { data } = await supabase
+      .from("procurement_requests")
+      .select("id")
+      .eq("pr_number", prNumber)
+      .single();
+    if (data) {
+      await supabase
+        .from("request_items")
+        .update({ status })
+        .eq("request_id", data.id);
+    }
+  },
+
+  // Requirement 2: Expose log activity to frontend
+  logActivity: async (
+    prNumber: string,
+    user: string,
+    action: string,
+    details: string,
+  ) => {
+    const { data } = await supabase
+      .from("procurement_requests")
+      .select("id")
+      .eq("pr_number", prNumber)
+      .single();
+    if (data) {
+      await _logActivityInternal(
+        data.id,
+        user,
+        action,
+        details,
+      );
+    }
   },
 
   bulkUpdate: async (
@@ -583,17 +645,23 @@ export const purchaseOrdersAPI = {
     await checkAndClosePR(prNumber);
   },
 
+  // Requirement 4: Support multiple proof IDs
   updateItemDeliveryStatus: async (
     itemId: string,
     requestId: string,
     poId: string,
     isDelivered: boolean,
-    proofId?: string,
+    proofIds?: string[] | string, // Updated Type
     reason?: string,
   ): Promise<void> => {
+    // Logic to serialize array if needed
+    const proofIdValue = Array.isArray(proofIds)
+      ? JSON.stringify(proofIds)
+      : proofIds;
+
     const updatePayload: any = {
       status: isDelivered ? "Delivered" : "Process by Vendor",
-      delivery_proof_id: isDelivered ? proofId : null,
+      delivery_proof_id: isDelivered ? proofIdValue : null,
     };
 
     const { error: itemError } = await supabase
@@ -607,17 +675,16 @@ export const purchaseOrdersAPI = {
       ? "Item Delivered"
       : "Delivery Cancelled";
     const details = isDelivered
-      ? `Item marked as Delivered. Proof ID: ${proofId || "N/A"}`
+      ? `Item marked as Delivered. Linked Proofs: ${proofIdValue || "N/A"}`
       : `Delivery status revoked. Reason: ${reason}`;
 
-    await logActivity(
+    await _logActivityInternal(
       requestId,
       "System User",
       action,
       details,
     );
 
-    // Check PO Closure
     // Check PO Closure
     const { data: allItems, error: itemsError } = await supabase
       .from("request_items")
@@ -646,6 +713,7 @@ export const purchaseOrdersAPI = {
     }
   },
 };
+
 export const vendorsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase.from("vendors")

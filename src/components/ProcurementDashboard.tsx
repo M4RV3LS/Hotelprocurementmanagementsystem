@@ -143,7 +143,10 @@ export default function ProcurementDashboard({
   }, [requests]);
 
   const filteredData = useMemo(() => {
-    let filtered = [...tableRows];
+    // Start by filtering out "Pending Approval" items (Requirement 1)
+    let filtered = tableRows.filter(
+      (row) => row.status !== "Pending Approval",
+    );
 
     if (searchQuery) {
       const query = searchQuery.toLowerCase();

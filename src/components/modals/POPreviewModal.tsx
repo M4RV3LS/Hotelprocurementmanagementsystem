@@ -87,15 +87,16 @@ export default function POPreviewModal({
     }
   };
 
-  const handleConfirmLink = async (proofId: string) => {
+  const handleConfirmLink = async (proofIds: string[]) => {
     if (!linkProofItem) return;
     try {
+      // Pass the array of IDs (Requirement 4)
       await purchaseOrdersAPI.updateItemDeliveryStatus(
         linkProofItem.itemId,
         linkProofItem.reqId,
         po.id,
         true,
-        proofId,
+        proofIds, // Changed from single ID to string[]
       );
       await refreshPO();
       setLinkProofItem(null);
@@ -264,9 +265,10 @@ export default function POPreviewModal({
                   {po.items.map((item, index) => {
                     const isDelivered =
                       item.status === "Delivered";
-                    const linkedProof = po.deliveryProofs?.find(
-                      (p) => p.id === item.deliveryProofId,
-                    );
+                    const linkedProofs =
+                      po.deliveryProofs?.filter((p) =>
+                        item.deliveryProofId?.includes(p.id),
+                      );
 
                     return (
                       <tr

@@ -1,13 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import ProcurementDashboard from "./components/ProcurementDashboard";
 import Configuration from "./components/Configuration";
 import ListPR from "./components/ListPR";
 import ListPO from "./components/ListPO";
+import RequestApproval from "./components/RequestApproval"; // Requirement 5: New Import
 import {
   initialRequests,
   initialVendors,
   initialItems,
-} from "./data/seedData"; // Use Seed Data
+} from "./data/seedData";
 import type { ProcurementRequest } from "./data/mockData";
 import {
   procurementRequestsAPI,
@@ -17,8 +18,13 @@ import { useConfigData } from "./hooks/useConfigData";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "configuration" | "listPR" | "listPO"
+    | "dashboard"
+    | "configuration"
+    | "listPR"
+    | "listPO"
+    | "requestApproval"
   >("dashboard");
+
   const [sharedRequests, setSharedRequests] = useState<
     ProcurementRequest[]
   >([]);
@@ -27,7 +33,21 @@ export default function App() {
   const configData = useConfigData();
 
   const [isLoading, setIsLoading] = useState(true);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // Helper to refresh data from DB (Used by RequestApproval)
+  const refreshRequests = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const requests = await procurementRequestsAPI.getAll();
+      setSharedRequests(requests);
+    } catch (error) {
+      console.error("Error refreshing requests:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     const initializeAndLoadData = async () => {
@@ -105,8 +125,10 @@ export default function App() {
     };
 
     initializeAndLoadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handle updates from Dashboard/ListPR (Optimistic + DB Sync)
   const handleRequestsUpdate = async (
     updatedRequests: ProcurementRequest[],
   ) => {
@@ -138,32 +160,33 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-[1600px] mx-auto px-6">
-          <div className="flex gap-8">
+          <div className="flex gap-8 overflow-x-auto">
             {[
-              "dashboard",
-              "configuration",
-              "listPR",
-              "listPO",
+              {
+                id: "dashboard",
+                label: "Procurement Dashboard",
+              },
+              { id: "configuration", label: "Configuration" },
+              { id: "listPR", label: "List PR" },
+              { id: "listPO", label: "List PO" },
+              {
+                id: "requestApproval",
+                label: "Request Approval",
+              }, // Requirement 5: New Tab
             ].map((tab) => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`py-4 px-6 relative transition-colors ${
-                  activeTab === tab
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`py-4 px-6 relative transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
                     ? "text-[#ec2224]"
                     : "text-gray-600 hover:text-gray-900"
                 }`}
               >
-                <span className="relative z-10">
-                  {tab === "dashboard"
-                    ? "Procurement Dashboard"
-                    : tab === "configuration"
-                      ? "Configuration"
-                      : tab === "listPR"
-                        ? "List PR"
-                        : "List PO"}
+                <span className="relative z-10 font-medium">
+                  {tab.label}
                 </span>
-                {activeTab === tab && (
+                {activeTab === tab.id && (
                   <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#ec2224]" />
                 )}
               </button>
@@ -176,23 +199,36 @@ export default function App() {
         {activeTab === "dashboard" && (
           <ProcurementDashboard
             requests={sharedRequests}
-            vendors={configData.vendors} // Pass Vendors
+            vendors={configData.vendors}
             onRequestsUpdate={handleRequestsUpdate}
           />
         )}
-        {activeTab === "configuration" && <Configuration />}{" "}
-        {/* Config handles its own data via hook */}
+
+        {activeTab === "configuration" && <Configuration />}
+
         {activeTab === "listPR" && (
           <ListPR
             requests={sharedRequests}
             onRequestsUpdate={handleRequestsUpdate}
-            vendors={configData.vendors} // ADD THIS: Pass vendors data
+            vendors={configData.vendors}
           />
         )}
+
         {activeTab === "listPO" && (
           <ListPO
+            onRequestsUpdate={async () => {
+              // When PO actions happen, refresh global request state
+              await refreshRequests();
+            }}
+          />
+        )}
+
+        {/* Requirement 5: Request Approval Component */}
+        {activeTab === "requestApproval" && (
+          <RequestApproval
             requests={sharedRequests}
-            onRequestsUpdate={handleRequestsUpdate}
+            vendors={configData.vendors}
+            onUpdate={refreshRequests} // Triggers re-fetch after Approve/Reject
           />
         )}
       </div>
