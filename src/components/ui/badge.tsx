@@ -1,46 +1,47 @@
-import * as React from "react";
-import { Slot } from "@radix-ui/react-slot@1.1.2";
-import { cva, type VariantProps } from "class-variance-authority@0.7.1";
+type Status =
+  | "Review by Procurement"
+  | "Waiting PO"
+  | "Waiting PO Approval"
+  | "On Process by Vendor"
+  | "Process by Vendor"
+  | "Delivered"
+  | "Cancelled by Procurement"
+  | "Closed";
 
-import { cn } from "./utils";
-
-const badgeVariants = cva(
-  "inline-flex items-center justify-center rounded-md border px-2 py-0.5 text-xs font-medium w-fit whitespace-nowrap shrink-0 [&>svg]:size-3 gap-1 [&>svg]:pointer-events-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive transition-[color,box-shadow] overflow-hidden",
-  {
-    variants: {
-      variant: {
-        default:
-          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
-        secondary:
-          "border-transparent bg-secondary text-secondary-foreground [a&]:hover:bg-secondary/90",
-        destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
-        outline:
-          "text-foreground [a&]:hover:bg-accent [a&]:hover:text-accent-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  },
-);
-
-function Badge({
-  className,
-  variant,
-  asChild = false,
-  ...props
-}: React.ComponentProps<"span"> &
-  VariantProps<typeof badgeVariants> & { asChild?: boolean }) {
-  const Comp = asChild ? Slot : "span";
-
-  return (
-    <Comp
-      data-slot="badge"
-      className={cn(badgeVariants({ variant }), className)}
-      {...props}
-    />
-  );
+interface StatusBadgeProps {
+  status: Status;
 }
 
-export { Badge, badgeVariants };
+export default function StatusBadge({
+  status,
+}: StatusBadgeProps) {
+  const getStatusStyles = () => {
+    switch (status) {
+      case "Review by Procurement":
+        return "bg-amber-100 text-amber-800 border-amber-200";
+      case "Waiting PO":
+        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "Waiting PO Approval":
+        return "bg-blue-50 text-blue-700 border-blue-200"; // Light Blue
+      case "On Process by Vendor":
+      case "Process by Vendor":
+        return "bg-purple-100 text-purple-800 border-purple-200";
+      case "Delivered":
+        return "bg-green-100 text-green-800 border-green-200";
+      case "Cancelled by Procurement":
+        return "bg-red-50 text-red-700 border-red-200"; // Light Red
+      case "Closed":
+        return "bg-gray-100 text-gray-600 border-gray-200";
+      default:
+        return "bg-gray-100 text-gray-800 border-gray-200";
+    }
+  };
+
+  return (
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusStyles()}`}
+    >
+      {status}
+    </span>
+  );
+}

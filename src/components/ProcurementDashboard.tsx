@@ -1,7 +1,12 @@
-// src/components/ProcurementDashboard.tsx
-
 import { useState, useMemo, useEffect } from "react";
-import { Plus, ChevronDown, Search } from "lucide-react";
+import {
+  Plus,
+  ChevronDown,
+  Search,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import {
   type ProcurementRequest,
   type ProcurementStatus,
@@ -13,6 +18,10 @@ import GeneratePOModal from "./GeneratePOModalUpdated";
 import InputETAForm from "./forms/InputETAForm";
 import ActionButtons from "./ActionButtons";
 import Toast from "./Toast";
+import RejectRequestModal from "./modals/RejectRequestModal";
+import { purchaseOrdersAPI } from "../utils/api";
+
+const ITEMS_PER_PAGE = 10;
 
 const statuses: Array<ProcurementStatus | "All"> = [
   "All",
@@ -34,7 +43,7 @@ interface TableRow {
   prNumber: string;
   propertyName: string;
   propertyCode: string;
-  propertyType: string; // Added propertyType
+  propertyType: string;
   status: string;
   itemName: string;
   quantity: number;
@@ -53,7 +62,7 @@ interface ProcurementDashboardProps {
 
 export default function ProcurementDashboard({
   requests: externalRequests,
-  vendors: externalVendors = [], // Default to empty array
+  vendors: externalVendors = [],
   onRequestsUpdate,
 }: ProcurementDashboardProps = {}) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -78,6 +87,8 @@ export default function ProcurementDashboard({
   } | null>(null);
   const [highlightedPRNumber, setHighlightedPRNumber] =
     useState<string | null>(null);
+
+  // Modals
   const [showGeneratePOModal, setShowGeneratePOModal] =
     useState(false);
   const [selectedPRNumberForPO, setSelectedPRNumberForPO] =
@@ -89,6 +100,17 @@ export default function ProcurementDashboard({
   const [selectedPropertyType, setSelectedPropertyType] =
     useState("All");
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+
+  // Reject Modal State
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectItemTarget, setRejectItemTarget] = useState<{
+    itemId: string;
+    prNumber: string;
+  } | null>(null);
+  const [isRejecting, setIsRejecting] = useState(false);
+
   useEffect(() => {
     if (externalRequests) {
       setRequests(externalRequests);
@@ -98,17 +120,15 @@ export default function ProcurementDashboard({
   // Convert requests to table rows based on ITEMS
   const tableRows = useMemo(() => {
     const rows: TableRow[] = [];
-
     requests.forEach((request) => {
       request.items.forEach((item, index) => {
         const itemDisplay = item.itemName;
-
         rows.push({
           prNumber: request.prNumber,
           propertyName: request.propertyName,
           propertyCode: request.propertyCode,
           propertyType: request.propertyType,
-          status: item.status, // ALWAYS use item status
+          status: item.status,
           itemName: itemDisplay,
           quantity: item.quantity,
           uom: item.uom,
@@ -119,7 +139,6 @@ export default function ProcurementDashboard({
         });
       });
     });
-
     return rows;
   }, [requests]);
 
@@ -144,7 +163,6 @@ export default function ProcurementDashboard({
       );
     }
 
-    // REQ 1: Filter by Property Type
     if (selectedPropertyType !== "All") {
       filtered = filtered.filter(
         (row) => row.propertyType === selectedPropertyType,
@@ -168,12 +186,81 @@ export default function ProcurementDashboard({
     tableRows,
   ]);
 
+  // Pagination Logic
+  const totalPages = Math.ceil(
+    filteredData.length / ITEMS_PER_PAGE,
+  );
+  const paginatedData = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredData.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredData, currentPage]);
+
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
+
   const toggleStatus = (status: string) => {
     setSelectedStatuses((prev) =>
       prev.includes(status)
         ? prev.filter((s) => s !== status)
         : [...prev, status],
     );
+  };
+
+  // Reject Logic
+  const initiateReject = (item: ProcurementItem) => {
+    setRejectItemTarget({
+      itemId: item.id,
+      prNumber: item.prNumber,
+    });
+    setShowRejectModal(true);
+  };
+
+  const confirmReject = async (
+    reason: string,
+    file: File | null,
+  ) => {
+    if (!rejectItemTarget) return;
+    setIsRejecting(true);
+    try {
+      await purchaseOrdersAPI.rejectItem(
+        rejectItemTarget.itemId,
+        "",
+        rejectItemTarget.prNumber,
+        reason,
+        file,
+      );
+
+      // Local Update
+      const updatedRequests = requests.map((req) => ({
+        ...req,
+        items: req.items.map((item) =>
+          item.id === rejectItemTarget.itemId
+            ? {
+                ...item,
+                status: "Cancelled by Procurement" as const,
+              }
+            : item,
+        ),
+      }));
+
+      if (onRequestsUpdate) onRequestsUpdate(updatedRequests);
+      setRequests(updatedRequests);
+
+      setShowRejectModal(false);
+      setToast({
+        message: "Item rejected successfully",
+        type: "success",
+      });
+    } catch (error) {
+      console.error(error);
+      alert("Failed to reject item");
+    } finally {
+      setIsRejecting(false);
+      setRejectItemTarget(null);
+    }
   };
 
   const propagateUpdates = (
@@ -215,11 +302,12 @@ export default function ProcurementDashboard({
   };
 
   const getRowGroupClass = (row: TableRow, index: number) => {
-    const prevRow = index > 0 ? filteredData[index - 1] : null;
+    const prevRow = index > 0 ? paginatedData[index - 1] : null; // Use paginatedData here for correct row grouping visuals
     const nextRow =
-      index < filteredData.length - 1
-        ? filteredData[index + 1]
+      index < paginatedData.length - 1
+        ? paginatedData[index + 1]
         : null;
+
     const samePRAsPrev =
       prevRow && prevRow.prNumber === row.prNumber;
     const samePRAsNext =
@@ -239,11 +327,6 @@ export default function ProcurementDashboard({
     return baseClass;
   };
 
-  const handleGeneratePO = (prNumber: string) => {
-    setSelectedPRNumberForPO(prNumber);
-    setShowGeneratePOModal(true);
-  };
-
   const handleInputETA = (prNumber: string) => {
     setSelectedPRNumberForETA(prNumber);
     setShowInputETAModal(true);
@@ -251,6 +334,7 @@ export default function ProcurementDashboard({
 
   return (
     <div className="space-y-6">
+      {/* Filters Section */}
       <div>
         <h1 className="text-gray-900 mb-6">
           Procurement Dashboard
@@ -364,6 +448,7 @@ export default function ProcurementDashboard({
         </div>
       </div>
 
+      {/* Data Table */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -396,7 +481,7 @@ export default function ProcurementDashboard({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredData.length === 0 ? (
+              {paginatedData.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
@@ -406,7 +491,14 @@ export default function ProcurementDashboard({
                   </td>
                 </tr>
               ) : (
-                filteredData.map((row, index) => {
+                paginatedData.map((row, index) => {
+                  // Determine if Reject button should be shown
+                  const canReject = [
+                    "Review by Procurement",
+                    "Waiting PO",
+                    "Waiting PO Approval",
+                  ].includes(row.status);
+
                   return (
                     <tr
                       key={`${row.prNumber}-${row.item.id}`}
@@ -444,15 +536,29 @@ export default function ProcurementDashboard({
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <ActionButtons
-                          request={row.request}
-                          onViewRequest={() =>
-                            setSelectedRequest(row.request)
-                          }
-                          onInputETA={() =>
-                            handleInputETA(row.prNumber)
-                          }
-                        />
+                        <div className="flex justify-end items-center gap-2">
+                          <ActionButtons
+                            request={row.request}
+                            onViewRequest={() =>
+                              setSelectedRequest(row.request)
+                            }
+                            onInputETA={() =>
+                              handleInputETA(row.prNumber)
+                            }
+                          />
+                          {/* Reject Button */}
+                          {canReject && (
+                            <button
+                              onClick={() =>
+                                initiateReject(row.item)
+                              }
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-200"
+                              title="Reject Request"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -461,12 +567,71 @@ export default function ProcurementDashboard({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+          <div className="text-sm text-gray-600">
+            Showing{" "}
+            {paginatedData.length === 0
+              ? 0
+              : (currentPage - 1) * ITEMS_PER_PAGE + 1}{" "}
+            to{" "}
+            {Math.min(
+              currentPage * ITEMS_PER_PAGE,
+              filteredData.length,
+            )}{" "}
+            of {filteredData.length} entries
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage === 1}
+              className="p-2 rounded-md border border-gray-300 bg-white text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            {Array.from(
+              { length: Math.min(5, totalPages) },
+              (_, i) => {
+                let pageNum = i + 1;
+                if (totalPages > 5 && currentPage > 3) {
+                  pageNum = currentPage - 2 + i;
+                  if (pageNum > totalPages)
+                    pageNum = totalPages - (4 - i);
+                }
+                if (pageNum > 0) {
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-3 py-1 text-sm rounded-md border ${
+                        currentPage === pageNum
+                          ? "bg-[#ec2224] text-white border-[#ec2224]"
+                          : "bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                }
+                return null;
+              },
+            )}
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage === totalPages}
+              className="p-2 rounded-md border border-gray-300 bg-white text-gray-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </div>
 
       {selectedRequest && (
         <RequestDetailModal
           request={selectedRequest}
-          vendors={externalVendors} // PASS IT HERE
+          vendors={externalVendors}
           onClose={() => setSelectedRequest(null)}
           onUpdate={handleUpdateRequest}
         />
@@ -486,8 +651,8 @@ export default function ProcurementDashboard({
             setShowGeneratePOModal(false);
             setSelectedPRNumberForPO(null);
           }}
-          vendors={externalVendors} // PASS IT HERE
-          requests={requests} // Pass full requests for item scanning
+          vendors={externalVendors}
+          requests={requests}
           onGenerate={(updatedRequests) => {
             const updatedMap = new Map(
               updatedRequests.map((r) => [r.prNumber, r]),
@@ -495,9 +660,7 @@ export default function ProcurementDashboard({
             const newRequests = requests.map(
               (req) => updatedMap.get(req.prNumber) || req,
             );
-
             propagateUpdates(newRequests);
-
             setShowGeneratePOModal(false);
             setToast({
               message: "PO generated successfully!",
@@ -520,16 +683,12 @@ export default function ProcurementDashboard({
             setSelectedPRNumberForETA(null);
           }}
           onSubmit={(updatedRequest) => {
-            // For ETA form, we might need to update specific items status too
-            // But typically ETA applies to the whole "delivery" (shipment)
-            // We'll update the items that have the relevant status
             const processedItems = updatedRequest.items.map(
               (item) => {
                 if (
                   item.status === "Waiting PO" ||
                   item.poNumber
                 ) {
-                  // Assuming we are updating items in transit
                   return {
                     ...item,
                     status: "On Process by Vendor" as const,
@@ -538,20 +697,16 @@ export default function ProcurementDashboard({
                 return item;
               },
             );
-
             const finalRequest = {
               ...updatedRequest,
               items: processedItems,
             };
-
             const newRequests = requests.map((req) =>
               req.prNumber === selectedPRNumberForETA
                 ? finalRequest
                 : req,
             );
-
             propagateUpdates(newRequests);
-
             setShowInputETAModal(false);
             setSelectedPRNumberForETA(null);
             setToast({
@@ -560,6 +715,15 @@ export default function ProcurementDashboard({
             });
             setTimeout(() => setToast(null), 5000);
           }}
+        />
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <RejectRequestModal
+          onClose={() => setShowRejectModal(false)}
+          onConfirm={confirmReject}
+          isLoading={isRejecting}
         />
       )}
     </div>

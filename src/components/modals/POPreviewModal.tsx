@@ -7,6 +7,7 @@ import {
   Phone,
   Mail,
   User,
+  Eye,
 } from "lucide-react";
 import type { PurchaseOrder } from "../../data/mockData";
 import { purchaseOrdersAPI } from "../../utils/api";
@@ -34,6 +35,7 @@ export default function POPreviewModal({
     reqId: string;
   } | null>(null);
 
+  // Calculate stats for progress bar
   const totalItems = po.items.length;
   const deliveredItems = po.items.filter(
     (i) => i.status === "Delivered",
@@ -61,9 +63,7 @@ export default function POPreviewModal({
         await refreshPO();
       } catch (error) {
         console.error("Upload failed", error);
-        alert(
-          "Failed to upload BAST. Check bucket permissions.",
-        );
+        alert("Failed to upload BAST. Check console.");
       } finally {
         setIsUploading(false);
       }
@@ -124,7 +124,7 @@ export default function POPreviewModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[95vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="border-b border-gray-200 px-8 py-5 flex justify-between items-center bg-gray-50 rounded-t-lg">
           <div className="flex items-center gap-4">
@@ -153,7 +153,7 @@ export default function POPreviewModal({
         </div>
 
         <div className="p-8 overflow-y-auto bg-white space-y-8">
-          {/* Vendor Details Only (Ship To Removed) */}
+          {/* Vendor Information */}
           <div className="border-b border-gray-100 pb-8">
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
@@ -211,162 +211,219 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* 1. Upload BAST */}
-            <div className="md:col-span-1 space-y-4">
-              <div className="flex justify-between items-center">
-                <h4 className="font-semibold text-gray-900">
-                  Delivery Proofs (BAST)
-                </h4>
-                <label className="cursor-pointer text-[#ec2224] text-sm hover:underline flex items-center gap-1 font-medium">
-                  <Upload className="w-3 h-3" /> Upload New
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    accept=".pdf,.jpg,.png"
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
+          {/* REQ 1: Requested Item List (Moved above BAST) */}
+          <div className="space-y-4">
+            <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-[#ec2224] pl-3">
+              Requested Item List
+            </h4>
+            <div className="border rounded-lg overflow-hidden shadow-sm overflow-x-auto">
+              <table className="w-full text-sm min-w-[1200px]">
+                <thead className="bg-gray-100 border-b text-gray-700">
+                  <tr>
+                    {/* 2. No */}
+                    <th className="px-4 py-3 text-center w-12">
+                      #
+                    </th>
+                    {/* 1. Ticked Box */}
+                    <th className="px-4 py-3 text-center w-12">
+                      Tick
+                    </th>
+                    {/* 3. Brand */}
+                    <th className="px-4 py-3 text-left">
+                      Brand
+                    </th>
+                    {/* 4. Item */}
+                    <th className="px-4 py-3 text-left">
+                      Item Name
+                    </th>
+                    {/* 5. Qty */}
+                    <th className="px-4 py-3 text-right">
+                      Qty
+                    </th>
+                    {/* 6. PIC */}
+                    <th className="px-4 py-3 text-left">PIC</th>
+                    {/* 7. Property Code */}
+                    <th className="px-4 py-3 text-left">
+                      Property Code
+                    </th>
+                    {/* 8. Property Name */}
+                    <th className="px-4 py-3 text-left">
+                      Property Name
+                    </th>
+                    {/* 9. Address */}
+                    <th className="px-4 py-3 text-left">
+                      Address
+                    </th>
+                    {/* 10. Proof Attached */}
+                    <th className="px-4 py-3 text-left">
+                      Proof Attached
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {po.items.map((item, index) => {
+                    const isDelivered =
+                      item.status === "Delivered";
+                    const linkedProof = po.deliveryProofs?.find(
+                      (p) => p.id === item.deliveryProofId,
+                    );
 
-              <div className="border rounded-lg bg-gray-50 p-4 min-h-[200px] space-y-3">
-                {po.deliveryProofs &&
-                po.deliveryProofs.length > 0 ? (
-                  po.deliveryProofs.map((proof) => (
-                    <div
-                      key={proof.id}
-                      className="flex items-center gap-3 bg-white p-3 rounded border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
-                    >
-                      <div className="bg-red-50 p-2 rounded text-[#ec2224]">
-                        <FileText className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <a
-                          href={proof.fileLink}
-                          target="_blank"
-                          className="text-sm font-medium text-gray-900 hover:text-[#ec2224] truncate block"
+                    return (
+                      <tr
+                        key={item.id}
+                        className={
+                          isDelivered
+                            ? "bg-green-50/50"
+                            : "hover:bg-gray-50"
+                        }
+                      >
+                        {/* No */}
+                        <td className="px-4 py-3 text-center text-gray-500">
+                          {index + 1}
+                        </td>
+                        {/* Tick Box */}
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isDelivered}
+                            onChange={(e) =>
+                              handleCheckboxChange(
+                                item,
+                                e.target.checked,
+                              )
+                            }
+                            className="w-5 h-5 text-[#ec2224] rounded border-gray-300 focus:ring-[#ec2224] cursor-pointer"
+                          />
+                        </td>
+                        {/* Brand */}
+                        <td className="px-4 py-3">
+                          {item.brandName || "N/A"}
+                        </td>
+                        {/* Item */}
+                        <td className="px-4 py-3 font-medium text-gray-900">
+                          {item.itemName}
+                        </td>
+                        {/* Qty */}
+                        <td className="px-4 py-3 text-right">
+                          {item.quantity} {item.uom}
+                        </td>
+                        {/* PIC */}
+                        <td className="px-4 py-3">
+                          {item.picName || "N/A"}
+                        </td>
+                        {/* Property Code */}
+                        <td className="px-4 py-3 font-mono text-xs">
+                          {item.propertyCode || "N/A"}
+                        </td>
+                        {/* Property Name */}
+                        <td
+                          className="px-4 py-3 max-w-[200px] truncate"
+                          title={item.propertyName}
                         >
-                          {proof.name}
-                        </a>
-                        <p className="text-xs text-gray-500">
-                          {new Date(
-                            proof.uploadedAt,
-                          ).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-center py-8">
-                    <Upload className="w-8 h-8 text-gray-300 mb-2" />
-                    <p className="text-gray-500 text-sm">
-                      No proofs uploaded yet.
-                    </p>
-                    <p className="text-gray-400 text-xs mt-1">
-                      Upload BAST files here.
-                    </p>
-                  </div>
-                )}
-              </div>
+                          {item.propertyName || "N/A"}
+                        </td>
+                        {/* Address */}
+                        <td
+                          className="px-4 py-3 max-w-[250px] truncate text-gray-500"
+                          title={item.propertyAddress}
+                        >
+                          {item.propertyAddress || "N/A"}
+                        </td>
+                        {/* Proof Attached */}
+                        <td className="px-4 py-3">
+                          {linkedProof ? (
+                            <a
+                              href={linkedProof.fileLink}
+                              target="_blank"
+                              className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-3 py-1.5 rounded-full hover:bg-green-200 transition-colors"
+                            >
+                              <FileText className="w-3 h-3" />{" "}
+                              Proof Link
+                            </a>
+                          ) : (
+                            <span className="text-xs text-gray-400 italic">
+                              --
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* REQ 1 & 2: BAST / Delivery Proofs (Moved Below & Added Preview) */}
+          <div className="space-y-4 pt-4 border-t border-gray-200">
+            <div className="flex justify-between items-center">
+              <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-blue-500 pl-3">
+                BAST / Delivery Proofs
+              </h4>
+              <label className="cursor-pointer bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium shadow-sm">
+                <Upload className="w-4 h-4" /> Upload New File
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  accept=".pdf,.jpg,.png"
+                  disabled={isUploading}
+                />
+              </label>
             </div>
 
-            {/* 2. Item List */}
-            <div className="md:col-span-2 space-y-4">
-              <h4 className="font-semibold text-gray-900">
-                Item Fulfillment Checklist
-              </h4>
-              <div className="border rounded-lg overflow-hidden shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-100 border-b">
-                    <tr>
-                      <th className="px-4 py-3 text-center w-16">
-                        Mark
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        Item Details
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        Qty
-                      </th>
-                      <th className="px-4 py-3 text-left pl-6">
-                        Proof Attached
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {po.items.map((item) => {
-                      const isDelivered =
-                        item.status === "Delivered";
-                      const linkedProof =
-                        po.deliveryProofs?.find(
-                          (p) => p.id === item.deliveryProofId,
-                        );
-
-                      return (
-                        <tr
-                          key={item.id}
-                          className={
-                            isDelivered
-                              ? "bg-green-50/50"
-                              : "hover:bg-gray-50"
-                          }
-                        >
-                          <td className="px-4 py-4 text-center align-top pt-5">
-                            <input
-                              type="checkbox"
-                              checked={isDelivered}
-                              onChange={(e) =>
-                                handleCheckboxChange(
-                                  item,
-                                  e.target.checked,
-                                )
-                              }
-                              className="w-5 h-5 text-[#ec2224] rounded border-gray-300 focus:ring-[#ec2224] cursor-pointer"
-                            />
-                          </td>
-                          <td className="px-4 py-4 align-top">
-                            <div className="font-medium text-gray-900 text-base">
-                              {item.itemName}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              Cat: {item.itemCategory} | Code:{" "}
-                              {item.itemCode}
-                            </div>
-                            <div className="text-xs text-gray-400 mt-0.5">
-                              PR: {item.prNumber}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 text-right align-top pt-5 font-medium text-gray-700">
-                            {item.quantity} {item.uom}
-                          </td>
-                          <td className="px-4 py-4 align-top pl-6 pt-5">
-                            {linkedProof ? (
-                              <a
-                                href={linkedProof.fileLink}
-                                target="_blank"
-                                className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-3 py-1.5 rounded-full hover:bg-green-200 transition-colors"
-                              >
-                                <FileText className="w-3 h-3" />{" "}
-                                {linkedProof.name.length > 15
-                                  ? linkedProof.name.substring(
-                                      0,
-                                      15,
-                                    ) + "..."
-                                  : linkedProof.name}
-                              </a>
-                            ) : (
-                              <span className="text-xs text-gray-400 italic px-2">
-                                -- Pending --
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {po.deliveryProofs &&
+              po.deliveryProofs.length > 0 ? (
+                po.deliveryProofs.map((proof) => (
+                  <div
+                    key={proof.id}
+                    className="group relative bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="bg-red-50 p-2 rounded text-[#ec2224]">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      {/* Requirement 2: Preview Capability */}
+                      <a
+                        href={proof.fileLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-gray-400 hover:text-[#ec2224] p-1"
+                        title="Preview File"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </a>
+                    </div>
+                    <div className="mt-2">
+                      <p
+                        className="font-medium text-gray-900 text-sm truncate"
+                        title={proof.name}
+                      >
+                        {proof.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(
+                          proof.uploadedAt,
+                        ).toLocaleDateString()}
+                      </p>
+                    </div>
+                    {/* Make whole card clickable for preview */}
+                    <a
+                      href={proof.fileLink}
+                      target="_blank"
+                      className="absolute inset-0 z-0"
+                      aria-label="View Proof"
+                    />
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                  <p className="text-gray-500">
+                    No delivery proofs uploaded yet.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -15,7 +15,6 @@ export interface DeliveryProof {
   uploadedAt: string;
 }
 
-// Status type
 export type ProcurementStatus =
   | "Review by Procurement"
   | "Waiting PO"
@@ -113,6 +112,13 @@ export interface ProcurementItem {
   estimatedDeliveryEnd?: string;
   deliveryProofId?: string; // Link to BAST
   deliveryDate?: string;
+  rejectionReason?: string;
+  rejectionProofLink?: string;
+  propertyName?: string;
+  propertyCode?: string;
+  propertyAddress?: string;
+  brandName?: string;
+  picName?: string;
 }
 
 export interface ProcurementRequest {
@@ -142,6 +148,10 @@ export interface PurchaseOrder {
   generatedDate: string;
   vendorName: string; // Joined from vendor
   vendorId: string;
+  vendorEmail?: string;
+  vendorAddress?: string;
+  vendorPhone?: string;
+  vendorContact?: string;
   status: POStatus;
   approvalStatus: POApprovalStatus;
   signedPoLink?: string;

@@ -12,6 +12,41 @@ const supabase = createClient(
   publicAnonKey,
 );
 
+// Helper to check and update PR status (Requirement 5)
+const checkAndClosePR = async (prNumber: string) => {
+  if (!prNumber) return;
+
+  // Get all items for this PR
+  const { data: items, error } = await supabase
+    .from("procurement_requests")
+    .select(
+      `
+      request_items (status)
+    `,
+    )
+    .eq("pr_number", prNumber)
+    .single();
+
+  if (error || !items) return;
+
+  const allItems = items.request_items || [];
+  if (allItems.length === 0) return;
+
+  // Check if all items are either Delivered or Cancelled
+  const allClosed = allItems.every(
+    (item: any) =>
+      item.status === "Delivered" ||
+      item.status === "Cancelled by Procurement",
+  );
+
+  const newStatus = allClosed ? "Close" : "Open";
+
+  await supabase
+    .from("procurement_requests")
+    .update({ status: newStatus })
+    .eq("pr_number", prNumber);
+};
+
 // Helper function to determine region from a procurement request row
 const determineRegion = (row: any): string => {
   if (row.region) return row.region;
@@ -250,8 +285,11 @@ export const purchaseOrdersAPI = {
           master_items(name, code, category),
           request:procurement_requests(
             pr_number,
-            property_name, 
+            property_name,
+            property_code, 
             property_address, 
+            property_type,
+            brand_name,
             pic_name, 
             pic_number
           )
@@ -261,7 +299,6 @@ export const purchaseOrdersAPI = {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
-
     return data.map((po: any) => ({
       id: po.id,
       poNumber: po.po_number,
@@ -291,8 +328,11 @@ export const purchaseOrdersAPI = {
         status: i.status,
         itemCategory: i.master_items?.category || "Ops Item",
         deliveryProofId: i.delivery_proof_id,
-        // Property Data available in fetch but removed from frontend object per request
-        // propertyName: i.request?.property_name,
+        propertyName: i.request?.property_name,
+        propertyCode: i.request?.property_code,
+        propertyAddress: i.request?.property_address,
+        brandName: i.request?.brand_name || "RedDoorz", // Default or fetched
+        picName: i.request?.pic_name,
       })),
       prNumbers: Array.from(
         new Set((po.items || []).map((i: any) => i.request_id)),
@@ -416,12 +456,23 @@ export const purchaseOrdersAPI = {
     bucket: string,
     path: string,
   ): Promise<string> => {
+    // 1. Sanitize the path to ensure it doesn't contain double slashes or invalid chars
+    const cleanPath = path.replace(/\/+/g, "/");
+
     const { data, error } = await supabase.storage
       .from(bucket)
-      .upload(path, file, { upsert: true });
+      .upload(cleanPath, file, {
+        upsert: true,
+        cacheControl: "3600",
+        contentType: file.type,
+      });
 
     if (error) {
-      console.error("Storage Error:", error);
+      console.error("Storage Upload Error Details:", {
+        message: error.message,
+        path: cleanPath,
+        bucket: bucket,
+      });
       throw error;
     }
 
@@ -432,7 +483,6 @@ export const purchaseOrdersAPI = {
     return publicUrlData.publicUrl;
   },
 
-  // REQ 1: Fixed Filename Sanitization & Bucket
   addDeliveryProof: async (
     poId: string,
     proofData: {
@@ -488,6 +538,51 @@ export const purchaseOrdersAPI = {
     return newProof;
   },
 
+  rejectItem: async (
+    itemId: string,
+    requestId: string, // pr_number or ID needed for checkAndClosePR? Logic uses prNumber usually
+    prNumber: string,
+    reason: string,
+    proofFile: File | null,
+  ): Promise<void> => {
+    let proofLink = "";
+
+    if (proofFile) {
+      // Sanitize filename
+      const safeName = proofFile.name.replace(
+        /[^a-zA-Z0-9.\-_]/g,
+        "_",
+      );
+      const path = `Rejections/${itemId}/${Date.now()}_${safeName}`;
+
+      // Reuse the uploadFile helper from existing code
+      const { data, error } = await supabase.storage
+        .from("Delivery Proof") // Using same bucket for simplicity, or create a 'Rejections' bucket
+        .upload(path, proofFile, { upsert: true });
+
+      if (!error) {
+        const { data: publicUrl } = supabase.storage
+          .from("Delivery Proof")
+          .getPublicUrl(data.path);
+        proofLink = publicUrl.publicUrl;
+      }
+    }
+
+    const { error } = await supabase
+      .from("request_items")
+      .update({
+        status: "Cancelled by Procurement",
+        rejection_reason: reason,
+        rejection_proof_link: proofLink,
+      })
+      .eq("id", itemId);
+
+    if (error) throw error;
+
+    // Check if PR should close
+    await checkAndClosePR(prNumber);
+  },
+
   updateItemDeliveryStatus: async (
     itemId: string,
     requestId: string,
@@ -523,6 +618,7 @@ export const purchaseOrdersAPI = {
     );
 
     // Check PO Closure
+    // Check PO Closure
     const { data: allItems, error: itemsError } = await supabase
       .from("request_items")
       .select("status")
@@ -531,13 +627,16 @@ export const purchaseOrdersAPI = {
     if (itemsError) throw itemsError;
 
     if (allItems && allItems.length > 0) {
-      const totalItems = allItems.length;
-      const deliveredItems = allItems.filter(
-        (i) => i.status === "Delivered",
-      ).length;
-      const newPOStatus =
-        deliveredItems === totalItems ? "Close" : "Open";
+      // Logic Update: A PO is Closed if ALL items are either 'Delivered' OR 'Cancelled'
+      const allItemsFinalized = allItems.every(
+        (i) =>
+          i.status === "Delivered" ||
+          i.status === "Cancelled by Procurement",
+      );
 
+      const newPOStatus = allItemsFinalized ? "Close" : "Open";
+
+      // Only update if the status is actually changing (optional optimization, but good practice)
       const { error: poError } = await supabase
         .from("purchase_orders")
         .update({ status: newPOStatus })
@@ -547,7 +646,6 @@ export const purchaseOrdersAPI = {
     }
   },
 };
-
 export const vendorsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase.from("vendors")
