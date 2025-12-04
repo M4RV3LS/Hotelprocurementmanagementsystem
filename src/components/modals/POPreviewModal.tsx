@@ -90,13 +90,12 @@ export default function POPreviewModal({
   const handleConfirmLink = async (proofIds: string[]) => {
     if (!linkProofItem) return;
     try {
-      // Pass the array of IDs (Requirement 4)
       await purchaseOrdersAPI.updateItemDeliveryStatus(
         linkProofItem.itemId,
         linkProofItem.reqId,
         po.id,
         true,
-        proofIds, // Changed from single ID to string[]
+        proofIds, // Passing array of IDs
       );
       await refreshPO();
       setLinkProofItem(null);
@@ -121,6 +120,33 @@ export default function POPreviewModal({
     } catch (err) {
       alert("Failed to update status");
     }
+  };
+
+  // Helper to safely parse deliveryProofId which might be a JSON array string or a single ID
+  const getLinkedProofs = (item: any) => {
+    if (!item.deliveryProofId) return [];
+
+    let ids: string[] = [];
+
+    // Check if it looks like a JSON array (starts with [)
+    if (
+      typeof item.deliveryProofId === "string" &&
+      item.deliveryProofId.trim().startsWith("[")
+    ) {
+      try {
+        ids = JSON.parse(item.deliveryProofId);
+      } catch {
+        // Fallback: treat as single ID if parse fails
+        ids = [item.deliveryProofId];
+      }
+    } else {
+      // Legacy support: simple string ID
+      ids = [item.deliveryProofId];
+    }
+
+    return (
+      po.deliveryProofs?.filter((p) => ids.includes(p.id)) || []
+    );
   };
 
   return (
@@ -212,7 +238,7 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          {/* REQ 1: Requested Item List (Moved above BAST) */}
+          {/* Requested Item List */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-[#ec2224] pl-3">
               Requested Item List
@@ -221,43 +247,33 @@ export default function POPreviewModal({
               <table className="w-full text-sm min-w-[1200px]">
                 <thead className="bg-gray-100 border-b text-gray-700">
                   <tr>
-                    {/* 2. No */}
                     <th className="px-4 py-3 text-center w-12">
                       #
                     </th>
-                    {/* 1. Ticked Box */}
                     <th className="px-4 py-3 text-center w-12">
                       Tick
                     </th>
-                    {/* 3. Brand */}
                     <th className="px-4 py-3 text-left">
                       Brand
                     </th>
-                    {/* 4. Item */}
                     <th className="px-4 py-3 text-left">
                       Item Name
                     </th>
-                    {/* 5. Qty */}
                     <th className="px-4 py-3 text-right">
                       Qty
                     </th>
-                    {/* 6. PIC */}
                     <th className="px-4 py-3 text-left">PIC</th>
-                    {/* 7. Property Code */}
                     <th className="px-4 py-3 text-left">
                       Property Code
                     </th>
-                    {/* 8. Property Name */}
                     <th className="px-4 py-3 text-left">
                       Property Name
                     </th>
-                    {/* 9. Address */}
                     <th className="px-4 py-3 text-left">
                       Address
                     </th>
-                    {/* 10. Proof Attached */}
                     <th className="px-4 py-3 text-left">
-                      Proof Attached
+                      Proofs Attached
                     </th>
                   </tr>
                 </thead>
@@ -265,10 +281,8 @@ export default function POPreviewModal({
                   {po.items.map((item, index) => {
                     const isDelivered =
                       item.status === "Delivered";
-                    const linkedProofs =
-                      po.deliveryProofs?.filter((p) =>
-                        item.deliveryProofId?.includes(p.id),
-                      );
+                    // Use helper to get array of proofs
+                    const linkedProofs = getLinkedProofs(item);
 
                     return (
                       <tr
@@ -279,11 +293,9 @@ export default function POPreviewModal({
                             : "hover:bg-gray-50"
                         }
                       >
-                        {/* No */}
                         <td className="px-4 py-3 text-center text-gray-500">
                           {index + 1}
                         </td>
-                        {/* Tick Box */}
                         <td className="px-4 py-3 text-center">
                           <input
                             type="checkbox"
@@ -297,51 +309,50 @@ export default function POPreviewModal({
                             className="w-5 h-5 text-[#ec2224] rounded border-gray-300 focus:ring-[#ec2224] cursor-pointer"
                           />
                         </td>
-                        {/* Brand */}
                         <td className="px-4 py-3">
                           {item.brandName || "N/A"}
                         </td>
-                        {/* Item */}
                         <td className="px-4 py-3 font-medium text-gray-900">
                           {item.itemName}
                         </td>
-                        {/* Qty */}
                         <td className="px-4 py-3 text-right">
                           {item.quantity} {item.uom}
                         </td>
-                        {/* PIC */}
                         <td className="px-4 py-3">
                           {item.picName || "N/A"}
                         </td>
-                        {/* Property Code */}
                         <td className="px-4 py-3 font-mono text-xs">
                           {item.propertyCode || "N/A"}
                         </td>
-                        {/* Property Name */}
                         <td
                           className="px-4 py-3 max-w-[200px] truncate"
                           title={item.propertyName}
                         >
                           {item.propertyName || "N/A"}
                         </td>
-                        {/* Address */}
                         <td
                           className="px-4 py-3 max-w-[250px] truncate text-gray-500"
                           title={item.propertyAddress}
                         >
                           {item.propertyAddress || "N/A"}
                         </td>
-                        {/* Proof Attached */}
+                        {/* Proof Attached Column (Fixed) */}
                         <td className="px-4 py-3">
-                          {linkedProof ? (
-                            <a
-                              href={linkedProof.fileLink}
-                              target="_blank"
-                              className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-3 py-1.5 rounded-full hover:bg-green-200 transition-colors"
-                            >
-                              <FileText className="w-3 h-3" />{" "}
-                              Proof Link
-                            </a>
+                          {linkedProofs.length > 0 ? (
+                            <div className="flex flex-col gap-1">
+                              {linkedProofs.map((proof) => (
+                                <a
+                                  key={proof.id}
+                                  href={proof.fileLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-md hover:bg-green-200 transition-colors w-fit"
+                                >
+                                  <FileText className="w-3 h-3" />{" "}
+                                  {proof.name}
+                                </a>
+                              ))}
+                            </div>
                           ) : (
                             <span className="text-xs text-gray-400 italic">
                               --
@@ -356,7 +367,7 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          {/* REQ 1 & 2: BAST / Delivery Proofs (Moved Below & Added Preview) */}
+          {/* BAST / Delivery Proofs */}
           <div className="space-y-4 pt-4 border-t border-gray-200">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-blue-500 pl-3">
@@ -386,7 +397,6 @@ export default function POPreviewModal({
                       <div className="bg-red-50 p-2 rounded text-[#ec2224]">
                         <FileText className="w-6 h-6" />
                       </div>
-                      {/* Requirement 2: Preview Capability */}
                       <a
                         href={proof.fileLink}
                         target="_blank"
@@ -410,7 +420,6 @@ export default function POPreviewModal({
                         ).toLocaleDateString()}
                       </p>
                     </div>
-                    {/* Make whole card clickable for preview */}
                     <a
                       href={proof.fileLink}
                       target="_blank"

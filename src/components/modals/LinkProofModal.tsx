@@ -1,4 +1,3 @@
-// src/components/modals/LinkProofModal.tsx
 import { useState } from "react";
 import { X, CheckSquare, Square } from "lucide-react";
 import type { DeliveryProof } from "../../data/mockData";
@@ -6,7 +5,7 @@ import type { DeliveryProof } from "../../data/mockData";
 interface Props {
   proofs: DeliveryProof[];
   onClose: () => void;
-  onConfirm: (proofIds: string[]) => void; // Requirement 4: Allow array
+  onConfirm: (proofIds: string[]) => void;
 }
 
 export default function LinkProofModal({
