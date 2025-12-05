@@ -35,6 +35,7 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isInitialized, setIsInitialized] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Helper to refresh data from DB (Used by RequestApproval)
   const refreshRequests = useCallback(async () => {
@@ -53,6 +54,7 @@ export default function App() {
     const initializeAndLoadData = async () => {
       try {
         setIsLoading(true);
+        setError(null);
 
         let requests = await procurementRequestsAPI.getAll();
 
@@ -118,6 +120,7 @@ export default function App() {
         setSharedRequests(requests);
       } catch (error) {
         console.error("Error loading data:", error);
+        setError(error instanceof Error ? error.message : "Failed to load data. Please check if the database is set up correctly.");
         setSharedRequests([]);
       } finally {
         setIsLoading(false);
@@ -151,6 +154,41 @@ export default function App() {
           <p className="mt-4 text-gray-600">
             Loading system data...
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || configData.error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-2xl w-full">
+          <div className="text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <h2 className="text-gray-900 mb-2">Database Connection Error</h2>
+            <p className="text-gray-600 mb-6">
+              {error || configData.error}
+            </p>
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-medium text-gray-900 mb-2">Possible Solutions:</h3>
+              <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
+                <li>Verify that your Supabase database tables are created</li>
+                <li>Check your internet connection</li>
+                <li>Ensure the Supabase project is active</li>
+                <li>Try refreshing the page</li>
+              </ul>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors"
+            >
+              Retry Connection
+            </button>
+          </div>
         </div>
       </div>
     );
