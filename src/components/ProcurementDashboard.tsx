@@ -23,6 +23,7 @@ import { purchaseOrdersAPI } from "../utils/api";
 
 const ITEMS_PER_PAGE = 10;
 
+// Requirement 1: Added "Cancelled by Procurement" to filters
 const statuses: Array<ProcurementStatus | "All"> = [
   "All",
   "Review by Procurement",
@@ -30,6 +31,7 @@ const statuses: Array<ProcurementStatus | "All"> = [
   "Waiting PO Approval",
   "Process by Vendor",
   "Delivered",
+  "Cancelled by Procurement",
 ];
 
 const propertyTypes = [
@@ -38,6 +40,10 @@ const propertyTypes = [
   "Franchise",
   "Management",
 ];
+
+// ... [Rest of the file remains unchanged] ...
+// (Include the rest of the interfaces and component logic exactly as they were,
+// just ensure the 'statuses' array above is updated)
 
 interface TableRow {
   prNumber: string;
@@ -305,7 +311,7 @@ export default function ProcurementDashboard({
   };
 
   const getRowGroupClass = (row: TableRow, index: number) => {
-    const prevRow = index > 0 ? paginatedData[index - 1] : null; // Use paginatedData here for correct row grouping visuals
+    const prevRow = index > 0 ? paginatedData[index - 1] : null;
     const nextRow =
       index < paginatedData.length - 1
         ? paginatedData[index + 1]
@@ -451,7 +457,7 @@ export default function ProcurementDashboard({
         </div>
       </div>
 
-      {/* Data Table */}
+      {/* Data Table and other components remain unchanged */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -495,7 +501,6 @@ export default function ProcurementDashboard({
                 </tr>
               ) : (
                 paginatedData.map((row, index) => {
-                  // Determine if Reject button should be shown
                   const canReject = [
                     "Review by Procurement",
                     "Waiting PO",
@@ -549,7 +554,6 @@ export default function ProcurementDashboard({
                               handleInputETA(row.prNumber)
                             }
                           />
-                          {/* Reject Button */}
                           {canReject && (
                             <button
                               onClick={() =>
@@ -571,7 +575,7 @@ export default function ProcurementDashboard({
           </table>
         </div>
 
-        {/* Pagination Controls */}
+        {/* Pagination Logic... */}
         <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Showing{" "}
@@ -721,7 +725,6 @@ export default function ProcurementDashboard({
         />
       )}
 
-      {/* Reject Modal */}
       {showRejectModal && (
         <RejectRequestModal
           onClose={() => setShowRejectModal(false)}

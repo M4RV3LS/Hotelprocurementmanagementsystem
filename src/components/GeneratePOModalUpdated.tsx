@@ -13,6 +13,7 @@ interface GeneratePOModalProps {
   requests: ProcurementRequest[];
 }
 
+// Requirement 2: Expanded PO Data interface for calculations
 interface POData {
   poNumber: string;
   poDate: string;
@@ -22,15 +23,21 @@ interface POData {
   vendorAddress: string;
   vendorPIC: string;
   ppnPercentage: number;
+  serviceChargePercentage: number; // Added
   items: Array<{
     prNumber: string;
     itemName: string;
+    brandItem: string; // Added: Item Brand
+    brandProperty: string; // Added: Property Brand
     quantity: number;
     uom: string;
     unitPrice: number;
     whtPercentage: number;
     pic: string;
-    region: string;
+    region: string; // Used for City
+    propertyCode: string; // Added
+    propertyName: string; // Added
+    propertyAddress: string; // Added
     item: ProcurementItem;
     status: "Ready" | "Not Ready";
   }>;
@@ -49,7 +56,7 @@ export default function GeneratePOModalUpdated({
   // Selection state
   const [selectedVendor, setSelectedVendor] = useState("");
   const [selectedPropertyType, setSelectedPropertyType] =
-    useState(""); // REQ 2: New State
+    useState("");
   const [selectedRegions, setSelectedRegions] = useState<
     string[]
   >([]);
@@ -89,17 +96,12 @@ export default function GeneratePOModalUpdated({
     ) as string[];
   };
 
-  // REQ 2: Filter logic for Property Types
   const getAvailablePropertyTypes = () => {
     if (!selectedVendor) return [];
     const availableItems = getAvailableItems();
-
-    // Filter items by vendor first
     const vendorItems = availableItems.filter(
       ({ item }) => item.vendorName === selectedVendor,
     );
-
-    // Extract property types from the LINKED REQUEST
     const types = new Set(
       vendorItems.map(({ request }) => request.propertyType),
     );
@@ -109,13 +111,11 @@ export default function GeneratePOModalUpdated({
   const getAvailableRegions = () => {
     if (!selectedVendor || !selectedPropertyType) return [];
     const availableItems = getAvailableItems();
-
     const filteredItems = availableItems.filter(
       ({ item, request }) =>
         item.vendorName === selectedVendor &&
-        request.propertyType === selectedPropertyType, // REQ 2: Dependency
+        request.propertyType === selectedPropertyType,
     );
-
     const regions = new Set(
       filteredItems.map(({ item }) => item.region),
     );
@@ -144,7 +144,6 @@ export default function GeneratePOModalUpdated({
     return Array.from(paymentTerms).filter(Boolean) as string[];
   };
 
-  // Helper count function
   const getMatchingItemsCount = (
     vendor?: string,
     propType?: string,
@@ -164,7 +163,7 @@ export default function GeneratePOModalUpdated({
       ({ item, request }) => {
         return (
           item.vendorName === selectedVendor &&
-          request.propertyType === selectedPropertyType && // REQ 2: Match logic
+          request.propertyType === selectedPropertyType &&
           selectedRegions.includes(item.region) &&
           item.paymentTerms === selectedPaymentTerms
         );
@@ -181,7 +180,10 @@ export default function GeneratePOModalUpdated({
     )
       .toString()
       .padStart(4, "0")}IDR`;
+
+    // Requirement 2a: PO Date Autofilled (Today)
     const poDate = new Date().toISOString().split("T")[0];
+
     const vendor = vendors.find(
       (v) => v.vendorName === selectedVendor,
     );
@@ -197,23 +199,33 @@ export default function GeneratePOModalUpdated({
       poNumber,
       poDate,
       eta: "",
-      paymentTerms: selectedPaymentTerms,
+      paymentTerms: selectedPaymentTerms, // Requirement 2b: Autofilled
       vendorName: selectedVendor,
       vendorAddress: vendor?.vendorAddress || "-",
       vendorPIC:
         vendor?.picName || vendor?.contact_person || "-",
       ppnPercentage: vendor?.ppnPercentage || 11,
+      serviceChargePercentage:
+        vendor?.serviceChargePercentage || 0, // Requirement 2d
       items: matchingItems.map(({ request, item }) => ({
         prNumber: request.prNumber,
         itemName: `${item.itemName}`,
+        brandItem:
+          item.itemCategory === "Branding Item"
+            ? request.brandName || "RedDoorz"
+            : "Generic", // Approximate logic for Brand Item
+        brandProperty: request.brandName, // Property Brand
         quantity: item.quantity,
         uom: item.uom,
         unitPrice: item.unitPrice || 0,
         whtPercentage: getItemWHT(item.itemCode),
         pic: request.picName,
         region: item.region,
+        propertyCode: request.propertyCode,
+        propertyName: request.propertyName,
+        propertyAddress: request.propertyAddress,
         item: item,
-        status: "Not Ready",
+        status: "Ready", // Default to Ready for preview logic
       })),
     };
 
@@ -274,8 +286,6 @@ export default function GeneratePOModalUpdated({
             `PO ${poData.poNumber} generated successfully with ${readyItems.length} items!`,
           );
 
-          // Optimistic Update for UI
-          // We iterate over the *existing* requests state and update the relevant items
           const readyItemIds = new Set(
             readyItems.map((i) => i.item.id),
           );
@@ -286,7 +296,7 @@ export default function GeneratePOModalUpdated({
               if (readyItemIds.has(item.id)) {
                 return {
                   ...item,
-                  status: "Waiting PO Approval" as const, // Force status change
+                  status: "Waiting PO Approval" as const,
                   poNumber: poData.poNumber,
                 };
               }
@@ -304,6 +314,51 @@ export default function GeneratePOModalUpdated({
     });
   };
 
+  // Requirement 2d: Calculations
+  const calculateTotals = () => {
+    if (!poData)
+      return {
+        totalQty: 0,
+        totalAmount: 0,
+        ppn: 0,
+        sc: 0,
+        grandTotal: 0,
+      };
+
+    const readyItems = poData.items.filter(
+      (i) => i.status === "Ready",
+    );
+
+    const totalQty = readyItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const totalAmount = readyItems.reduce(
+      (sum, item) => sum + item.quantity * item.unitPrice,
+      0,
+    );
+
+    // Standard Tax Calc: Total + Service Charge + PPN
+    // WHT is usually deducted from payment, so standard Invoice Grand Total = Total + SC + PPN
+    const sc =
+      totalAmount * (poData.serviceChargePercentage / 100);
+    const taxableAmount = totalAmount + sc;
+    const ppn = taxableAmount * (poData.ppnPercentage / 100);
+
+    const grandTotal = totalAmount + sc + ppn;
+
+    return { totalQty, totalAmount, ppn, sc, grandTotal };
+  };
+
+  const totals = calculateTotals();
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(val);
+
   return (
     <>
       <div
@@ -311,7 +366,7 @@ export default function GeneratePOModalUpdated({
         onClick={onClose}
       />
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
             <h2 className="text-gray-900">
               Generate Purchase Order
@@ -326,6 +381,7 @@ export default function GeneratePOModalUpdated({
 
           <div className="px-8 py-6">
             {step === "selection" ? (
+              // ... [Selection Step Code Remains Same] ...
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-blue-900 text-sm">
@@ -361,7 +417,7 @@ export default function GeneratePOModalUpdated({
                     </select>
                   </div>
 
-                  {/* 2. Property Type (NEW) */}
+                  {/* 2. Property Type */}
                   <div>
                     <label className="block text-gray-700 mb-2">
                       Property Type{" "}
@@ -463,10 +519,10 @@ export default function GeneratePOModalUpdated({
                 </div>
               </div>
             ) : (
-              // ... Preview Mode (Reuse existing table structure) ...
+              // Requirement 2: Preview Mode Updates
               <div className="space-y-6">
                 <div className="bg-gray-50 rounded-lg p-6">
-                  {/* ... Header details ... */}
+                  {/* Header details */}
                   <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
                     PO Header Details
                   </h3>
@@ -487,16 +543,32 @@ export default function GeneratePOModalUpdated({
                         {poData?.vendorName}
                       </span>
                     </div>
-                    {/* ... other fields ... */}
-                    <div className="col-span-2">
+                    <div>
+                      {/* Requirement 2a: Read Only PO Date */}
                       <span className="text-sm text-gray-500 block">
-                        Property Type
+                        PO Date
                       </span>
-                      <span className="text-gray-900">
-                        {selectedPropertyType}
-                      </span>
+                      <input
+                        type="date"
+                        value={poData?.poDate}
+                        disabled
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
+                      />
                     </div>
-                    {/* ... ETA Input ... */}
+                    <div>
+                      {/* Requirement 2b: Autofilled Payment Terms */}
+                      <span className="text-sm text-gray-500 block">
+                        Payment Terms
+                      </span>
+                      <input
+                        type="text"
+                        value={poData?.paymentTerms}
+                        disabled
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
+                      />
+                    </div>
+
+                    {/* ETA Input */}
                     <div>
                       <span className="text-sm text-gray-500 block mb-1">
                         ETA{" "}
@@ -522,29 +594,36 @@ export default function GeneratePOModalUpdated({
                   </div>
                 </div>
 
-                {/* Table Logic reused from original code but now using filtered items */}
+                {/* Requirement 2c: Adjusted Table Columns */}
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm text-left">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="bg-gray-50 text-gray-700 font-medium border-b">
                       <tr>
-                        <th className="px-4 py-3">PR Number</th>
+                        <th className="px-4 py-3">No</th>
+                        <th className="px-4 py-3">Brand</th>
+                        <th className="px-4 py-3">
+                          Brand Item
+                        </th>
                         <th className="px-4 py-3">Item Name</th>
+                        <th className="px-4 py-3">City</th>
                         <th className="px-4 py-3">Qty</th>
+                        <th className="px-4 py-3">PIC</th>
+                        <th className="px-4 py-3">Prop Code</th>
+                        <th className="px-4 py-3">Prop Name</th>
+                        <th className="px-4 py-3">Address</th>
                         <th className="px-4 py-3 text-right">
                           Unit Price
-                        </th>
-                        <th
-                          className="px-4 py-3 text-center"
-                          style={{ width: "100px" }}
-                        >
-                          WHT %
                         </th>
                         <th className="px-4 py-3 text-right">
                           Total
                         </th>
-                        <th className="px-4 py-3 text-center">
-                          Status
+                        <th
+                          className="px-4 py-3 text-center"
+                          style={{ width: "80px" }}
+                        >
+                          WHT %
                         </th>
+                        {/* Requirement 2e: Status Column Removed */}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -557,20 +636,53 @@ export default function GeneratePOModalUpdated({
                               : ""
                           }
                         >
-                          <td className="px-4 py-3 text-gray-600">
-                            {item.prNumber}
+                          <td className="px-4 py-3">
+                            {idx + 1}
                           </td>
-                          <td className="px-4 py-3 font-medium text-gray-900">
+                          <td className="px-4 py-3">
+                            {item.brandProperty}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.brandItem}
+                          </td>
+                          <td className="px-4 py-3 font-medium">
                             {item.itemName}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.region}
                           </td>
                           <td className="px-4 py-3">
                             {item.quantity} {item.uom}
                           </td>
+                          <td className="px-4 py-3">
+                            {item.pic}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.propertyCode}
+                          </td>
+                          <td
+                            className="px-4 py-3 truncate max-w-[150px]"
+                            title={item.propertyName}
+                          >
+                            {item.propertyName}
+                          </td>
+                          <td
+                            className="px-4 py-3 truncate max-w-[150px]"
+                            title={item.propertyAddress}
+                          >
+                            {item.propertyAddress}
+                          </td>
                           <td className="px-4 py-3 text-right">
-                            {new Intl.NumberFormat("id-ID", {
-                              style: "currency",
-                              currency: "IDR",
-                            }).format(item.unitPrice)}
+                            {new Intl.NumberFormat(
+                              "id-ID",
+                            ).format(item.unitPrice)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {new Intl.NumberFormat(
+                              "id-ID",
+                            ).format(
+                              item.unitPrice * item.quantity,
+                            )}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <input
@@ -596,58 +708,56 @@ export default function GeneratePOModalUpdated({
                                     : null,
                                 );
                               }}
-                              className="w-16 border rounded px-1 text-center text-sm"
+                              className="w-12 border rounded px-1 text-center text-xs"
                             />
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {new Intl.NumberFormat("id-ID", {
-                              style: "currency",
-                              currency: "IDR",
-                            }).format(
-                              item.unitPrice * item.quantity,
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <select
-                              value={item.status}
-                              onChange={(e) => {
-                                const val = e.target.value as
-                                  | "Ready"
-                                  | "Not Ready";
-                                const newItems = [
-                                  ...(poData?.items || []),
-                                ];
-                                newItems[idx] = {
-                                  ...item,
-                                  status: val,
-                                };
-                                setPOData(
-                                  poData
-                                    ? {
-                                        ...poData,
-                                        items: newItems,
-                                      }
-                                    : null,
-                                );
-                              }}
-                              className={`text-xs rounded px-2 py-1 border ${
-                                item.status === "Ready"
-                                  ? "bg-green-100 text-green-800 border-green-200"
-                                  : "bg-gray-100 text-gray-600 border-gray-300"
-                              }`}
-                            >
-                              <option value="Not Ready">
-                                Not Ready
-                              </option>
-                              <option value="Ready">
-                                Ready
-                              </option>
-                            </select>
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Requirement 2d: Total Calculations */}
+                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Total Quantity:
+                    </span>
+                    <span className="font-medium">
+                      {totals.totalQty}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Total Amount:
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.totalAmount)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Service Charge (
+                      {poData?.serviceChargePercentage}%):
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.sc)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      PPN ({poData?.ppnPercentage}%):
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.ppn)}
+                    </span>
+                  </div>
+                  <div className="border-t border-gray-300 pt-2 flex justify-between text-lg font-bold text-gray-900">
+                    <span>Grand Total:</span>
+                    <span>
+                      {formatCurrency(totals.grandTotal)}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="flex justify-between items-center pt-4 border-t border-gray-200">

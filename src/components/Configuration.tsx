@@ -2,11 +2,12 @@ import { useState } from "react";
 import ItemConfiguration from "./configuration/ItemConfiguration";
 import VendorManagement from "./configuration/VendorManagement";
 import PaymentMethodConfiguration from "./configuration/PaymentMethodConfiguration";
+import ItemCategoryConfiguration from "./configuration/ItemCategoryConfiguration";
 import { useConfigData } from "../hooks/useConfigData";
 
 export default function Configuration() {
   const [activeSubTab, setActiveSubTab] = useState<
-    "items" | "vendors" | "payment"
+    "items" | "vendors" | "payment" | "categories"
   >("items");
   const configData = useConfigData();
 
@@ -23,56 +24,28 @@ export default function Configuration() {
     );
   }
 
-  if (configData.error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <p className="text-red-800">
-          Error loading configuration: {configData.error}
-        </p>
-        <button
-          onClick={configData.refreshData}
-          className="mt-4 px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Sub-Navigation */}
-      <div className="bg-white border border-gray-200 rounded-lg p-1 inline-flex gap-1">
-        <button
-          onClick={() => setActiveSubTab("items")}
-          className={`px-6 py-2 rounded-md transition-colors ${
-            activeSubTab === "items"
-              ? "bg-[#ec2224] text-white"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Item Configuration
-        </button>
-        <button
-          onClick={() => setActiveSubTab("vendors")}
-          className={`px-6 py-2 rounded-md transition-colors ${
-            activeSubTab === "vendors"
-              ? "bg-[#ec2224] text-white"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Vendor Management
-        </button>
-        <button
-          onClick={() => setActiveSubTab("payment")}
-          className={`px-6 py-2 rounded-md transition-colors ${
-            activeSubTab === "payment"
-              ? "bg-[#ec2224] text-white"
-              : "text-gray-600 hover:text-gray-900"
-          }`}
-        >
-          Payment Method Configuration
-        </button>
+      <div className="bg-white border border-gray-200 rounded-lg p-1 inline-flex gap-1 overflow-x-auto">
+        {[
+          { id: "categories", label: "Item Category" },
+          { id: "items", label: "Item Configuration" },
+          { id: "vendors", label: "Vendor Management" },
+          { id: "payment", label: "Payment Methods" },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id as any)}
+            className={`px-4 py-2 rounded-md transition-colors whitespace-nowrap ${
+              activeSubTab === tab.id
+                ? "bg-[#ec2224] text-white"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
@@ -83,10 +56,13 @@ export default function Configuration() {
           onDeleteItem={configData.deleteItem}
         />
       )}
+      {activeSubTab === "categories" && (
+        <ItemCategoryConfiguration />
+      )}
       {activeSubTab === "vendors" && (
         <VendorManagement
           vendors={configData.vendors}
-          items={configData.items} // It passes items here
+          items={configData.items}
           onSaveVendor={configData.saveVendor}
           onDeleteVendor={configData.deleteVendor}
         />

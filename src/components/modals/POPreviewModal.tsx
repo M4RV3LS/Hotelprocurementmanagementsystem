@@ -8,6 +8,7 @@ import {
   Mail,
   User,
   Eye,
+  Trash2,
 } from "lucide-react";
 import type { PurchaseOrder } from "../../data/mockData";
 import { purchaseOrdersAPI } from "../../utils/api";
@@ -147,6 +148,26 @@ export default function POPreviewModal({
     return (
       po.deliveryProofs?.filter((p) => ids.includes(p.id)) || []
     );
+  };
+
+  // Requirement 4: Delete Handler
+  const handleDeleteProof = async (proofId: string) => {
+    if (
+      !confirm(
+        "Are you sure you want to delete this delivery proof?",
+      )
+    )
+      return;
+    try {
+      await purchaseOrdersAPI.deleteDeliveryProof(
+        po.id,
+        proofId,
+      );
+      await refreshPO();
+    } catch (error) {
+      console.error("Delete failed", error);
+      alert("Failed to delete proof.");
+    }
   };
 
   return (
@@ -397,15 +418,28 @@ export default function POPreviewModal({
                       <div className="bg-red-50 p-2 rounded text-[#ec2224]">
                         <FileText className="w-6 h-6" />
                       </div>
-                      <a
-                        href={proof.fileLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-gray-400 hover:text-[#ec2224] p-1"
-                        title="Preview File"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </a>
+                      <div className="flex gap-1">
+                        {/* Requirement 4: Delete Button */}
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleDeleteProof(proof.id);
+                          }}
+                          className="text-gray-400 hover:text-red-600 p-1 z-10 relative"
+                          title="Delete File"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                        <a
+                          href={proof.fileLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-gray-400 hover:text-[#ec2224] p-1 z-10 relative"
+                          title="Preview File"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </a>
+                      </div>
                     </div>
                     <div className="mt-2">
                       <p
@@ -420,6 +454,7 @@ export default function POPreviewModal({
                         ).toLocaleDateString()}
                       </p>
                     </div>
+                    {/* Click card to view */}
                     <a
                       href={proof.fileLink}
                       target="_blank"

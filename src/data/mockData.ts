@@ -15,6 +15,13 @@ export interface DeliveryProof {
   uploadedAt: string;
 }
 
+// New Interface for Categories
+export interface ItemCategory {
+  id: string;
+  name: string;
+  itemCount?: number;
+}
+
 export type ProcurementStatus =
   | "Review by Procurement"
   | "Waiting PO"
@@ -22,12 +29,18 @@ export type ProcurementStatus =
   | "Process by Vendor"
   | "Delivered"
   | "Closed"
-  | "Cancelled by Procurement";
+  | "Cancelled by Procurement"
+  | "Pending Approval"
+  | "Approved"
+  | "Rejected";
 
-// 2. Revamped Request Status
-export type RequestHeaderStatus = "Open" | "Close";
+export type RequestHeaderStatus =
+  | "Open"
+  | "Close"
+  | "Pending Approval"
+  | "Approved"
+  | "Rejected";
 
-// 3. PO Statuses
 export type POStatus = "Open" | "Close";
 export type POApprovalStatus = "Pending" | "Approved";
 
@@ -40,9 +53,9 @@ export type PropertyType =
 
 export type PaymentTerms =
   | "Cash Before Delivery"
-  | "Payment Terms";
+  | "Payment Terms"
+  | string;
 
-// Daftar Region Indonesia (KEPT AS REQUESTED)
 export const INDONESIA_REGIONS = [
   "Nanggroe Aceh Darussalam",
   "Sumatera Utara",
@@ -89,7 +102,10 @@ export interface ProcurementItem {
   prNumber: string;
   itemCode: string;
   itemName: string;
-  itemCategory: string;
+  itemCategory: string; // Display Name
+  categoryId?: string; // Link ID
+  description?: string; // New Field
+  photos?: string[]; // New Field
   selectedProperties: Record<string, string>;
   quantity: number;
   uom: string;
@@ -110,7 +126,7 @@ export interface ProcurementItem {
   isFixedPrice?: boolean;
   estimatedDeliveryStart?: string;
   estimatedDeliveryEnd?: string;
-  deliveryProofId?: string; // Link to BAST
+  deliveryProofId?: string;
   deliveryDate?: string;
   rejectionReason?: string;
   rejectionProofLink?: string;
@@ -138,15 +154,16 @@ export interface ProcurementRequest {
   invoiceDate?: string;
   invoiceFileLink?: string;
   activityLog?: ActivityLog[];
-  status: RequestHeaderStatus; // Changed type
+  status: RequestHeaderStatus;
   items: ProcurementItem[];
+  note?: string;
 }
 
 export interface PurchaseOrder {
   id: string;
   poNumber: string;
   generatedDate: string;
-  vendorName: string; // Joined from vendor
+  vendorName: string;
   vendorId: string;
   vendorEmail?: string;
   vendorAddress?: string;
@@ -156,7 +173,7 @@ export interface PurchaseOrder {
   approvalStatus: POApprovalStatus;
   signedPoLink?: string;
   totalAmount: number;
-  items: ProcurementItem[]; // Hydrated items
-  prNumbers: string[]; // Derived list of PRs
+  items: ProcurementItem[];
+  prNumbers: string[];
   deliveryProofs?: DeliveryProof[];
 }
