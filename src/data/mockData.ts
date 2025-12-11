@@ -97,6 +97,43 @@ export const INDONESIA_REGIONS = [
   "Papua Barat Daya",
 ];
 
+// Requirement 1: Predefined list of Regencies (Subset for Demo, expand as needed)
+export const INDONESIA_REGENCIES = [
+  "Jakarta Pusat",
+  "Jakarta Selatan",
+  "Jakarta Barat",
+  "Jakarta Timur",
+  "Jakarta Utara",
+  "Kab. Bogor",
+  "Kota Bogor",
+  "Kota Depok",
+  "Kab. Tangerang",
+  "Kota Tangerang",
+  "Kota Tangerang Selatan",
+  "Kab. Bekasi",
+  "Kota Bekasi",
+  "Kota Bandung",
+  "Kab. Bandung",
+  "Kab. Bandung Barat",
+  "Kota Cimahi",
+  "Semarang",
+  "Surabaya",
+  "Yogyakarta",
+  "Denpasar",
+  "Badung",
+  "Gianyar",
+  "Medan",
+  "Makassar",
+  "Balikpapan",
+  "Samarinda",
+  "Pontianak",
+  "Banjarmasin",
+  "Manado",
+  "Palembang",
+  "Pekanbaru",
+  "Batam",
+].sort();
+
 export interface ProcurementItem {
   id: string;
   prNumber: string;

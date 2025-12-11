@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { X, Image as ImageIcon } from "lucide-react";
-import { itemCategoriesAPI } from "../../utils/api";
+import { X, Image as ImageIcon, Loader2 } from "lucide-react";
+import { itemCategoriesAPI, itemsAPI } from "../../utils/api";
 import type { Item } from "../../data/mockData";
 
 interface ItemFormModalProps {
@@ -8,31 +8,6 @@ interface ItemFormModalProps {
   onClose: () => void;
   onSave: (item: Item) => void;
 }
-
-const brandNames = [
-  "Reddoorz",
-  "Reddoorz Premium",
-  "RedLiving",
-  "Sans",
-  "Sans Vibe",
-  "Sans Stay",
-  "Sans Elite",
-  "Urban View",
-  "The Lavana",
-  "No Branding",
-  "Vibes by SANS",
-];
-
-const categories = ["Branding Item", "Ops Item", "Others"];
-const commonUoM = [
-  "pcs",
-  "units",
-  "meters",
-  "liters",
-  "kg",
-  "sets",
-  "custom",
-];
 
 export default function ItemFormModal({
   item,
@@ -54,21 +29,39 @@ export default function ItemFormModal({
   );
 
   const [categories, setCategories] = useState<any[]>([]);
+  const [isUploading, setIsUploading] = useState(false); // Track upload state
 
   useEffect(() => {
     itemCategoriesAPI.getAll().then(setCategories);
   }, []);
 
-  const handlePhotoUpload = (
+  const handlePhotoUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
-      // Mock URL for display
-      const url = URL.createObjectURL(e.target.files[0]);
-      setFormData((prev: any) => ({
-        ...prev,
-        photos: [...(prev.photos || []), url],
-      }));
+      const file = e.target.files[0];
+
+      // Validation
+      if (file.size > 2 * 1024 * 1024) {
+        alert("File size must be less than 2MB");
+        return;
+      }
+
+      setIsUploading(true);
+      try {
+        // Requirement 2 Fix: Upload to Supabase instead of local blob
+        const publicUrl = await itemsAPI.uploadPhoto(file);
+
+        setFormData((prev: any) => ({
+          ...prev,
+          photos: [...(prev.photos || []), publicUrl],
+        }));
+      } catch (error) {
+        console.error("Failed to upload photo", error);
+        alert("Failed to upload photo. Please try again.");
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -171,7 +164,6 @@ export default function ItemFormModal({
                 />
               </div>
 
-              {/* Requirement 1: Category Dropdown */}
               <div>
                 <label className="block text-gray-700 mb-2">
                   Item Category
@@ -217,7 +209,6 @@ export default function ItemFormModal({
               </div>
             </div>
 
-            {/* Requirement 3: Description Field */}
             <div>
               <label className="block text-gray-700 mb-2">
                 Description
@@ -235,7 +226,7 @@ export default function ItemFormModal({
               />
             </div>
 
-            {/* Requirement 2: Multiple Photos */}
+            {/* Requirement 2 Fix: Photo Upload Section */}
             <div>
               <label className="block text-gray-700 mb-2">
                 Item Photos
@@ -245,7 +236,7 @@ export default function ItemFormModal({
                   (src: string, idx: number) => (
                     <div
                       key={idx}
-                      className="relative w-24 h-24 border rounded overflow-hidden group"
+                      className="relative w-24 h-24 border rounded-lg overflow-hidden group shadow-sm"
                     >
                       <img
                         src={src}
@@ -255,26 +246,41 @@ export default function ItemFormModal({
                       <button
                         type="button"
                         onClick={() => removePhoto(idx)}
-                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
                       >
                         <X className="w-3 h-3" />
                       </button>
                     </div>
                   ),
                 )}
-                <label className="w-24 h-24 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:border-[#ec2224] transition-colors">
-                  <ImageIcon className="w-6 h-6 text-gray-400" />
-                  <span className="text-xs text-gray-500 mt-1">
-                    Add Photo
-                  </span>
+
+                {/* Upload Button with Loading State */}
+                <label
+                  className={`w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-[#ec2224] transition-colors ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                >
+                  {isUploading ? (
+                    <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                  ) : (
+                    <>
+                      <ImageIcon className="w-6 h-6 text-gray-400" />
+                      <span className="text-xs text-gray-500 mt-1">
+                        Add Photo
+                      </span>
+                    </>
+                  )}
                   <input
                     type="file"
                     accept="image/*"
                     onChange={handlePhotoUpload}
                     className="hidden"
+                    disabled={isUploading}
                   />
                 </label>
               </div>
+              <p className="text-xs text-gray-500 mt-2">
+                Uploaded photos will be available for selection
+                in Vendor Configuration.
+              </p>
             </div>
 
             <div className="sticky bottom-0 bg-white border-t border-gray-200 pt-4 flex justify-end gap-3">
@@ -287,9 +293,10 @@ export default function ItemFormModal({
               </button>
               <button
                 type="submit"
-                className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors"
+                disabled={isUploading}
+                className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors disabled:bg-gray-300"
               >
-                Save Item
+                {isUploading ? "Uploading..." : "Save Item"}
               </button>
             </div>
           </form>

@@ -9,10 +9,14 @@ import {
   Eye,
   CheckSquare,
   Square,
+  Lock,
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 import MultiSelectDropdown from "./MultiSelectDropdown";
-import { INDONESIA_REGIONS } from "../../data/mockData";
+import {
+  INDONESIA_REGIONS,
+  INDONESIA_REGENCIES,
+} from "../../data/mockData"; // Requirement 1: Import Regencies
 import ConfirmationModal from "./ConfirmationModal";
 
 // --- Interfaces ---
@@ -37,7 +41,7 @@ interface VendorItem {
   agreementNumber: string;
   taxPercentage: number;
   propertyTypes: string[];
-  selectedPhotos: string[]; // For storing selected photo URLs
+  selectedPhotos: string[]; // Requirement 3: Array of selected photo URLs
   masterPhotos?: string[]; // Read-only from master item for selection context
 }
 
@@ -47,6 +51,7 @@ interface ExtendedVendor
   agreements: Agreement[];
   items: VendorItem[];
   deliveryFee?: number;
+  vendorRegency?: string; // Requirement 1: New Field
   // Legal & Admin Fields
   nibNumber?: string;
   nibFileLink?: string;
@@ -66,7 +71,7 @@ interface VendorFormModalProps {
   onClose: () => void;
   onSave: (vendor: ExtendedVendor) => void;
   activePaymentMethods: string[];
-  items: any[]; // Master items list for lookup
+  items: any[];
 }
 
 const PROPERTY_TYPES = ["Franchise", "Leasing", "Management"];
@@ -77,10 +82,12 @@ const FileUploadField = ({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
+  disabled?: boolean;
 }) => (
   <div>
     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -107,20 +114,23 @@ const FileUploadField = ({
           No file
         </span>
       )}
-      <label className="cursor-pointer text-xs text-blue-600 hover:underline font-medium">
-        Upload
-        <input
-          type="file"
-          className="hidden"
-          accept=".pdf,.png,.jpg,.jpeg"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              // In a real app, upload logic goes here. For Figma prototype, we use blob URL.
-              onChange(URL.createObjectURL(e.target.files[0]));
-            }
-          }}
-        />
-      </label>
+      {!disabled && (
+        <label className="cursor-pointer text-xs text-blue-600 hover:underline font-medium">
+          Upload
+          <input
+            type="file"
+            className="hidden"
+            accept=".pdf,.png,.jpg,.jpeg"
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                onChange(
+                  URL.createObjectURL(e.target.files[0]),
+                );
+              }
+            }}
+          />
+        </label>
+      )}
     </div>
   </div>
 );
@@ -134,12 +144,17 @@ export default function VendorFormModalUpdated({
   activePaymentMethods,
   items,
 }: VendorFormModalProps) {
+  // Requirement 2: Determine Edit Mode
+  // If vendor prop is provided, we are in "Edit Mode", so static data is read-only.
+  const isEditMode = !!vendor;
+
   // Initialize form state
   const [formData, setFormData] = useState<ExtendedVendor>(
     vendor || {
       vendorCode: "",
       vendorName: "",
       vendorRegion: [],
+      vendorRegency: "", // Init Requirement 1
       vendorAddress: "",
       vendorEmail: "",
       vendorPhone: "",
@@ -152,7 +167,6 @@ export default function VendorFormModalUpdated({
       agreements: [],
       items: [],
       isActive: true,
-      // New Fields Defaults
       nibNumber: "",
       nibFileLink: "",
       ktpNumber: "",
@@ -185,7 +199,7 @@ export default function VendorFormModalUpdated({
     (formData.items || []).map((i) => ({
       ...i,
       selectedPhotos: i.selectedPhotos || [],
-      // Hydrate master photos if editing an existing vendor item, finding match in master items list
+      // Hydrate master photos
       masterPhotos:
         i.masterPhotos ||
         items.find((mi: any) => mi.itemCode === i.itemCode)
@@ -296,6 +310,17 @@ export default function VendorFormModalUpdated({
       );
       setEditingItemIndex(null);
     } else {
+      // Check for duplicate
+      const exists = vendorItems.some(
+        (i) => i.itemCode === newItem.itemCode,
+      );
+      if (exists) {
+        setDuplicateWarning({
+          isOpen: true,
+          itemToAdd: newItem,
+        });
+        return;
+      }
       setVendorItems((prev) => [...prev, newItem]);
     }
 
@@ -321,6 +346,7 @@ export default function VendorFormModalUpdated({
     setShowAddItem(true);
   };
 
+  // Requirement 3: Photo Selection Logic
   const togglePhotoSelection = (
     itemIndex: number,
     photoUrl: string,
@@ -363,7 +389,6 @@ export default function VendorFormModalUpdated({
       prev.map((item) => {
         const hasType = item.propertyTypes.includes(type);
         if (allSelected) {
-          // Untick all
           return {
             ...item,
             propertyTypes: item.propertyTypes.filter(
@@ -371,7 +396,6 @@ export default function VendorFormModalUpdated({
             ),
           };
         } else {
-          // Tick all (if not already ticked)
           return {
             ...item,
             propertyTypes: hasType
@@ -398,6 +422,9 @@ export default function VendorFormModalUpdated({
     });
   };
 
+  // Common Input Class
+  const inputClass = `w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none ${isEditMode ? "bg-gray-100 text-gray-500 cursor-not-allowed" : "bg-white"}`;
+
   return (
     <>
       <div
@@ -408,9 +435,19 @@ export default function VendorFormModalUpdated({
         <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-            <h2 className="text-gray-900 font-bold text-lg">
-              {vendor ? "Edit Vendor" : "Add New Vendor"}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-gray-900 font-bold text-lg">
+                {isEditMode
+                  ? "Vendor Configuration"
+                  : "Add New Vendor"}
+              </h2>
+              {isEditMode && (
+                <span className="px-3 py-1 bg-amber-100 text-amber-800 text-xs font-medium rounded-full flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Static Data
+                  Locked
+                </span>
+              )}
+            </div>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -421,9 +458,12 @@ export default function VendorFormModalUpdated({
 
           <div className="px-6 py-6 space-y-8">
             {/* 1. Basic Information */}
-            <section>
-              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
+            <section className={isEditMode ? "opacity-90" : ""}>
+              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2 flex items-center gap-2">
                 Basic Information
+                {isEditMode && (
+                  <Lock className="w-3 h-3 text-gray-400" />
+                )}
               </h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -432,7 +472,7 @@ export default function VendorFormModalUpdated({
                     <span className="text-red-500">*</span>
                   </label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
+                    className={inputClass}
                     value={formData.vendorCode}
                     onChange={(e) =>
                       handleInputChange(
@@ -441,6 +481,7 @@ export default function VendorFormModalUpdated({
                       )
                     }
                     placeholder="VND001"
+                    disabled={isEditMode}
                   />
                 </div>
                 <div>
@@ -449,7 +490,7 @@ export default function VendorFormModalUpdated({
                     <span className="text-red-500">*</span>
                   </label>
                   <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
+                    className={inputClass}
                     value={formData.vendorName}
                     onChange={(e) =>
                       handleInputChange(
@@ -458,24 +499,62 @@ export default function VendorFormModalUpdated({
                       )
                     }
                     placeholder="PT Example"
+                    disabled={isEditMode}
                   />
                 </div>
-                <div>
+
+                {/* Region Multi-Select */}
+                <div
+                  className={
+                    isEditMode
+                      ? "pointer-events-none opacity-60"
+                      : ""
+                  }
+                >
                   <MultiSelectDropdown
                     options={INDONESIA_REGIONS}
                     selectedValues={selectedRegions}
                     onChange={setSelectedRegions}
-                    label="Regions"
+                    label="Coverage Regions"
                     placeholder="Select Regions"
                   />
                 </div>
+
+                {/* Requirement 1: Regency Dropdown */}
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">
+                    City / Regency{" "}
+                    <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    className={inputClass}
+                    value={formData.vendorRegency || ""}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "vendorRegency",
+                        e.target.value,
+                      )
+                    }
+                    disabled={isEditMode}
+                  >
+                    <option value="">
+                      Select City / Regency
+                    </option>
+                    {INDONESIA_REGENCIES.map((regency) => (
+                      <option key={regency} value={regency}>
+                        {regency}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">
                     Email
                   </label>
                   <input
                     type="email"
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
+                    className={inputClass}
                     value={formData.vendorEmail}
                     onChange={(e) =>
                       handleInputChange(
@@ -483,6 +562,23 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
+                    disabled={isEditMode}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">
+                    Phone
+                  </label>
+                  <input
+                    className={inputClass}
+                    value={formData.vendorPhone}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "vendorPhone",
+                        e.target.value,
+                      )
+                    }
+                    disabled={isEditMode}
                   />
                 </div>
                 <div className="col-span-2">
@@ -490,7 +586,7 @@ export default function VendorFormModalUpdated({
                     Address
                   </label>
                   <textarea
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
+                    className={inputClass}
                     rows={2}
                     value={formData.vendorAddress}
                     onChange={(e) =>
@@ -499,30 +595,19 @@ export default function VendorFormModalUpdated({
                         e.target.value,
                       )
                     }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Phone
-                  </label>
-                  <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    value={formData.vendorPhone}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorPhone",
-                        e.target.value,
-                      )
-                    }
+                    disabled={isEditMode}
                   />
                 </div>
               </div>
             </section>
 
-            {/* 2. Legal & Admin Information (New) */}
-            <section>
-              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
+            {/* 2. Legal & Admin Information */}
+            <section className={isEditMode ? "opacity-90" : ""}>
+              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2 flex items-center gap-2">
                 Legal & Admin Information
+                {isEditMode && (
+                  <Lock className="w-3 h-3 text-gray-400" />
+                )}
               </h3>
               <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
                 <div className="grid grid-cols-3 gap-6 mb-6">
@@ -533,7 +618,7 @@ export default function VendorFormModalUpdated({
                         NIB Number
                       </label>
                       <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                        className={inputClass}
                         value={formData.nibNumber}
                         onChange={(e) =>
                           handleInputChange(
@@ -541,6 +626,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <FileUploadField
@@ -549,6 +635,7 @@ export default function VendorFormModalUpdated({
                       onChange={(url) =>
                         handleInputChange("nibFileLink", url)
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                   {/* KTP */}
@@ -558,7 +645,7 @@ export default function VendorFormModalUpdated({
                         KTP Number
                       </label>
                       <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                        className={inputClass}
                         value={formData.ktpNumber}
                         onChange={(e) =>
                           handleInputChange(
@@ -566,6 +653,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <FileUploadField
@@ -574,6 +662,7 @@ export default function VendorFormModalUpdated({
                       onChange={(url) =>
                         handleInputChange("ktpFileLink", url)
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                   {/* NPWPD */}
@@ -583,7 +672,7 @@ export default function VendorFormModalUpdated({
                         NPWPD Number
                       </label>
                       <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
+                        className={inputClass}
                         value={formData.npwpdNumber}
                         onChange={(e) =>
                           handleInputChange(
@@ -591,6 +680,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <FileUploadField
@@ -599,6 +689,7 @@ export default function VendorFormModalUpdated({
                       onChange={(url) =>
                         handleInputChange("npwpdFileLink", url)
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                 </div>
@@ -609,7 +700,7 @@ export default function VendorFormModalUpdated({
                       Bank Name
                     </label>
                     <select
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
+                      className={inputClass}
                       value={formData.bankName}
                       onChange={(e) =>
                         handleInputChange(
@@ -617,6 +708,7 @@ export default function VendorFormModalUpdated({
                           e.target.value,
                         )
                       }
+                      disabled={isEditMode}
                     >
                       <option value="">Select Bank</option>
                       <option value="BCA">BCA</option>
@@ -633,7 +725,7 @@ export default function VendorFormModalUpdated({
                       Account Name
                     </label>
                     <input
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
+                      className={inputClass}
                       value={formData.bankAccountName}
                       onChange={(e) =>
                         handleInputChange(
@@ -641,6 +733,7 @@ export default function VendorFormModalUpdated({
                           e.target.value,
                         )
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                   <div>
@@ -648,7 +741,7 @@ export default function VendorFormModalUpdated({
                       Account Number
                     </label>
                     <input
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
+                      className={inputClass}
                       value={formData.bankAccountNumber}
                       onChange={(e) =>
                         handleInputChange(
@@ -656,6 +749,7 @@ export default function VendorFormModalUpdated({
                           e.target.value,
                         )
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                   <div className="pt-6">
@@ -668,6 +762,7 @@ export default function VendorFormModalUpdated({
                           url,
                         )
                       }
+                      disabled={isEditMode}
                     />
                   </div>
                 </div>
@@ -675,9 +770,14 @@ export default function VendorFormModalUpdated({
             </section>
 
             {/* 3. Tax & Fees */}
-            <section className="border-t border-gray-200 pt-6">
-              <h3 className="text-gray-900 mb-4 font-medium">
+            <section
+              className={`border-t border-gray-200 pt-6 ${isEditMode ? "opacity-90" : ""}`}
+            >
+              <h3 className="text-gray-900 mb-4 font-medium flex items-center gap-2">
                 Tax & Fees Configuration
+                {isEditMode && (
+                  <Lock className="w-3 h-3 text-gray-400" />
+                )}
               </h3>
               <div className="grid grid-cols-4 gap-4">
                 <div>
@@ -687,7 +787,7 @@ export default function VendorFormModalUpdated({
                   <input
                     type="number"
                     step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                    className={inputClass}
                     value={formData.ppnPercentage}
                     onChange={(e) =>
                       handleInputChange(
@@ -695,6 +795,7 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
+                    disabled={isEditMode}
                   />
                 </div>
                 <div>
@@ -704,7 +805,7 @@ export default function VendorFormModalUpdated({
                   <input
                     type="number"
                     step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                    className={inputClass}
                     value={formData.serviceChargePercentage}
                     onChange={(e) =>
                       handleInputChange(
@@ -712,6 +813,7 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
+                    disabled={isEditMode}
                   />
                 </div>
                 <div>
@@ -721,7 +823,7 @@ export default function VendorFormModalUpdated({
                   <input
                     type="number"
                     step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                    className={inputClass}
                     value={formData.pb1Percentage}
                     onChange={(e) =>
                       handleInputChange(
@@ -729,6 +831,7 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
+                    disabled={isEditMode}
                   />
                 </div>
                 <div>
@@ -737,7 +840,7 @@ export default function VendorFormModalUpdated({
                   </label>
                   <input
                     type="number"
-                    className="w-full border border-gray-300 rounded-lg p-2"
+                    className={inputClass}
                     value={formData.deliveryFee}
                     onChange={(e) =>
                       handleInputChange(
@@ -745,13 +848,16 @@ export default function VendorFormModalUpdated({
                         parseFloat(e.target.value) || 0,
                       )
                     }
+                    disabled={isEditMode}
                   />
                 </div>
               </div>
             </section>
 
             {/* 4. Payment Methods */}
-            <section className="border-t border-gray-200 pt-6">
+            <section
+              className={`border-t border-gray-200 pt-6 ${isEditMode ? "pointer-events-none opacity-60" : ""}`}
+            >
               <MultiSelectDropdown
                 options={activePaymentMethods}
                 selectedValues={selectedPaymentMethods}
@@ -761,18 +867,25 @@ export default function VendorFormModalUpdated({
               />
             </section>
 
-            {/* 5. Agreements */}
-            <section className="border-t border-gray-200 pt-6">
+            {/* 5. Agreements (Static in Edit Mode) */}
+            <section
+              className={`border-t border-gray-200 pt-6 ${isEditMode ? "opacity-90" : ""}`}
+            >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-gray-900 font-medium">
+                <h3 className="text-gray-900 font-medium flex items-center gap-2">
                   Agreements / Offerings
+                  {isEditMode && (
+                    <Lock className="w-3 h-3 text-gray-400" />
+                  )}
                 </h3>
-                <button
-                  onClick={handleAddAgreement}
-                  className="text-[#ec2224] hover:text-[#d11f21] text-sm flex items-center gap-1 font-medium"
-                >
-                  <Plus className="w-4 h-4" /> Add Document
-                </button>
+                {!isEditMode && (
+                  <button
+                    onClick={handleAddAgreement}
+                    className="text-[#ec2224] hover:text-[#d11f21] text-sm flex items-center gap-1 font-medium"
+                  >
+                    <Plus className="w-4 h-4" /> Add Document
+                  </button>
+                )}
               </div>
               {agreements.map((agreement, index) => (
                 <div
@@ -783,14 +896,16 @@ export default function VendorFormModalUpdated({
                     <h4 className="text-sm font-medium text-gray-700">
                       Document {index + 1}
                     </h4>
-                    <button
-                      onClick={() =>
-                        handleRemoveAgreement(index)
-                      }
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {!isEditMode && (
+                      <button
+                        onClick={() =>
+                          handleRemoveAgreement(index)
+                        }
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -798,7 +913,7 @@ export default function VendorFormModalUpdated({
                         Number
                       </label>
                       <input
-                        className="w-full border rounded p-2 text-sm"
+                        className={inputClass}
                         value={agreement.number}
                         onChange={(e) =>
                           handleAgreementChange(
@@ -807,6 +922,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <div>
@@ -814,7 +930,9 @@ export default function VendorFormModalUpdated({
                         Type
                       </label>
                       <div className="flex gap-3 mt-2">
-                        <label className="flex items-center gap-1 text-sm cursor-pointer">
+                        <label
+                          className={`flex items-center gap-1 text-sm ${isEditMode ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+                        >
                           <input
                             type="radio"
                             checked={
@@ -828,10 +946,13 @@ export default function VendorFormModalUpdated({
                               )
                             }
                             className="text-[#ec2224]"
+                            disabled={isEditMode}
                           />{" "}
                           Agreement
                         </label>
-                        <label className="flex items-center gap-1 text-sm cursor-pointer">
+                        <label
+                          className={`flex items-center gap-1 text-sm ${isEditMode ? "cursor-not-allowed opacity-70" : "cursor-pointer"}`}
+                        >
                           <input
                             type="radio"
                             checked={
@@ -845,18 +966,20 @@ export default function VendorFormModalUpdated({
                               )
                             }
                             className="text-[#ec2224]"
+                            disabled={isEditMode}
                           />{" "}
                           Offering
                         </label>
                       </div>
                     </div>
+                    {/* ... (Start/End Date & Link inputs, add disabled={isEditMode}) */}
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">
                         Start Date
                       </label>
                       <input
                         type="date"
-                        className="w-full border rounded p-2 text-sm"
+                        className={inputClass}
                         value={agreement.startDate}
                         onChange={(e) =>
                           handleAgreementChange(
@@ -865,6 +988,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <div>
@@ -873,7 +997,7 @@ export default function VendorFormModalUpdated({
                       </label>
                       <input
                         type="date"
-                        className="w-full border rounded p-2 text-sm"
+                        className={inputClass}
                         value={agreement.endDate}
                         onChange={(e) =>
                           handleAgreementChange(
@@ -882,6 +1006,7 @@ export default function VendorFormModalUpdated({
                             e.target.value,
                           )
                         }
+                        disabled={isEditMode}
                       />
                     </div>
                     <div className="col-span-2">
@@ -892,7 +1017,7 @@ export default function VendorFormModalUpdated({
                         <LinkIcon className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
                         <input
                           type="url"
-                          className="w-full border rounded p-2 pl-8 text-sm"
+                          className={`${inputClass} pl-8`}
                           placeholder="https://"
                           value={agreement.link}
                           onChange={(e) =>
@@ -902,6 +1027,7 @@ export default function VendorFormModalUpdated({
                               e.target.value,
                             )
                           }
+                          disabled={isEditMode}
                         />
                       </div>
                     </div>
@@ -910,7 +1036,7 @@ export default function VendorFormModalUpdated({
               ))}
             </section>
 
-            {/* 6. Vendor Items with Photo Selection (Req 2) */}
+            {/* 6. Vendor Item Configuration (Editable) */}
             <section className="border-t border-gray-200 pt-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-gray-900 font-medium">
@@ -939,7 +1065,7 @@ export default function VendorFormModalUpdated({
                 </button>
               </div>
 
-              {/* Requirement 2: Table View for Vendor Item Mapping */}
+              {/* Item Table */}
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200 text-left">
@@ -974,7 +1100,7 @@ export default function VendorFormModalUpdated({
                         </th>
                       ))}
                       <th className="px-4 py-3 font-medium text-gray-700 w-48 text-left">
-                        Photos
+                        Photos (Req. 3)
                       </th>
                       <th className="px-4 py-3 font-medium text-gray-700 text-right w-24">
                         Action
@@ -1048,7 +1174,7 @@ export default function VendorFormModalUpdated({
                             </td>
                           ))}
 
-                          {/* Photo Selection (Requirement 1) */}
+                          {/* Photo Selection (Requirement 3 Implementation) */}
                           <td className="px-4 py-3 align-top">
                             {item.masterPhotos &&
                             item.masterPhotos.length > 0 ? (
@@ -1073,7 +1199,7 @@ export default function VendorFormModalUpdated({
                                         }
                                         className={`relative w-12 h-12 border cursor-pointer rounded overflow-hidden transition-all ${
                                           isSelected
-                                            ? "border-green-500 ring-2 ring-green-100"
+                                            ? "border-green-500 ring-2 ring-green-100 opacity-100"
                                             : "border-gray-200 opacity-60 hover:opacity-100"
                                         }`}
                                         title={
@@ -1088,7 +1214,7 @@ export default function VendorFormModalUpdated({
                                           alt="Item"
                                         />
                                         {isSelected && (
-                                          <div className="absolute top-0 right-0 bg-green-500 text-white rounded-bl-md p-[1px]">
+                                          <div className="absolute top-0 right-0 bg-green-500 text-white rounded-bl-md p-[1px] shadow-sm">
                                             <CheckCircle className="w-2.5 h-2.5" />
                                           </div>
                                         )}
@@ -1155,7 +1281,7 @@ export default function VendorFormModalUpdated({
         </div>
       </div>
 
-      {/* Add/Edit Item Modal Overlay */}
+      {/* Add/Edit Item Modal Overlay - Kept Same */}
       {showAddItem && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
           <div className="bg-white p-6 rounded-lg w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-200">
@@ -1231,6 +1357,7 @@ export default function VendorFormModalUpdated({
                 </div>
               </div>
 
+              {/* Pricing & Agreement Fields ... Same as previous implementation */}
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Pricing Model
@@ -1353,7 +1480,6 @@ export default function VendorFormModalUpdated({
         </div>
       )}
 
-      {/* Duplicate Warning Modal */}
       {duplicateWarning.isOpen &&
         duplicateWarning.itemToAdd && (
           <ConfirmationModal
@@ -1361,7 +1487,6 @@ export default function VendorFormModalUpdated({
             message={`Item ${duplicateWarning.itemToAdd.itemName} is already in the list. Add it anyway?`}
             confirmLabel="Yes, Add"
             onConfirm={() => {
-              // Logic to commit add if confirm logic was separated
               setVendorItems((prev) => [
                 ...prev,
                 duplicateWarning.itemToAdd!,

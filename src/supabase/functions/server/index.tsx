@@ -109,15 +109,12 @@ app.get("/make-server-1e4a32a5/items", async (c) => {
 app.post("/make-server-1e4a32a5/items", async (c) => {
   try {
     const item = await c.req.json();
-
-    if (!item.itemCode) {
+    if (!item.itemCode)
       return c.json(
         { success: false, error: "Item Code is required" },
         400,
       );
-    }
 
-    // FIX: Convert empty string to null for UUID field
     const categoryId =
       item.categoryId && item.categoryId.trim() !== ""
         ? item.categoryId
@@ -130,12 +127,16 @@ app.post("/make-server-1e4a32a5/items", async (c) => {
           code: item.itemCode,
           name: item.itemName,
           brand_name: item.brandName,
-          category: item.itemCategory, // Text fallback
-          category_id: categoryId, // Link to Category Table
+          category: item.itemCategory,
+          category_id: categoryId,
           uom: item.uom,
           description: item.description,
           photos: item.photos,
           is_active: item.isActive,
+          // NEW FIELDS (Req 3)
+          length: item.dimensions?.length || 0,
+          width: item.dimensions?.width || 0,
+          height: item.dimensions?.height || 0,
         },
         { onConflict: "code" },
       )
@@ -145,7 +146,6 @@ app.post("/make-server-1e4a32a5/items", async (c) => {
     if (error) throw error;
     return c.json({ success: true, data: data });
   } catch (error) {
-    console.error("Save Item Error:", error);
     return c.json(
       { success: false, error: error.message },
       500,
@@ -456,3 +456,131 @@ app.post("/make-server-1e4a32a5/payment-methods", async (c) => {
 });
 
 Deno.serve(app.fetch);
+
+// --- [NEW] DELIVERY CONFIGURATION ROUTES (Req 1) ---
+
+// Get Global Config & Available Provinces
+app.get("/make-server-1e4a32a5/delivery/config", async (c) => {
+  try {
+    // Fetch Global Config
+    const { data: globalConfig, error: configError } =
+      await supabase
+        .from("delivery_global_config")
+        .select("*")
+        .limit(1)
+        .single();
+
+    if (configError && configError.code !== "PGRST116")
+      throw configError;
+
+    // Fetch Distinct Provinces that have rate cards
+    // Supabase JS doesn't support distinct easily on a column without a function,
+    // so we fetch provinces and dedup in code or assume the client handles specific province queries.
+    // Ideally use: .select('province').distinct() if supported by your version, else:
+    const { data: rateCards } = await supabase
+      .from("delivery_rate_cards")
+      .select("province");
+    const configuredProvinces = [
+      ...new Set(rateCards?.map((r: any) => r.province)),
+    ];
+
+    return c.json({
+      success: true,
+      config: globalConfig,
+      configuredProvinces,
+    });
+  } catch (error) {
+    return c.json(
+      { success: false, error: error.message },
+      500,
+    );
+  }
+});
+
+// Save Global Config
+app.post("/make-server-1e4a32a5/delivery/config", async (c) => {
+  try {
+    const payload = await c.req.json();
+    // Assuming single row architecture
+    const { error } = await supabase
+      .from("delivery_global_config")
+      .update({
+        volumetric_divisor: payload.volumetricDivisor,
+        min_chargeable_weight: payload.minChargeableWeight,
+        insurance_rate: payload.insuranceRate,
+        wood_packing_fee: payload.woodPackingFee,
+        vat_rate: payload.vatRate,
+      })
+      .neq("id", "00000000-0000-0000-0000-000000000000"); // Update all (should be 1)
+
+    if (error) throw error;
+    return c.json({ success: true });
+  } catch (error) {
+    return c.json(
+      { success: false, error: error.message },
+      500,
+    );
+  }
+});
+
+// Upload Rate Cards (Bulk)
+app.post(
+  "/make-server-1e4a32a5/delivery/rate-cards",
+  async (c) => {
+    try {
+      const { province, rates } = await c.req.json(); // rates is array of objects
+
+      if (!province) throw new Error("Province is required");
+
+      // 1. Delete existing rates for this province (Full Replacement Strategy)
+      await supabase
+        .from("delivery_rate_cards")
+        .delete()
+        .eq("province", province);
+
+      // 2. Prepare Insert
+      const rows = rates.map((r: any) => ({
+        province,
+        origin_city: r.originCity,
+        destination_city: r.destinationCity,
+        service_type: r.serviceType,
+        sla_estimates: r.slaEstimates,
+        base_rate_per_kg: r.baseRatePerKg,
+        surcharge_fixed: r.surchargeFixed,
+        surcharge_per_kg: r.surchargePerKg,
+      }));
+
+      // 3. Bulk Insert
+      const { error } = await supabase
+        .from("delivery_rate_cards")
+        .insert(rows);
+
+      if (error) throw error;
+      return c.json({ success: true, count: rows.length });
+    } catch (error) {
+      return c.json(
+        { success: false, error: error.message },
+        500,
+      );
+    }
+  },
+);
+
+// Get Rate Cards by Province
+app.get(
+  "/make-server-1e4a32a5/delivery/rate-cards/:province",
+  async (c) => {
+    const province = c.req.param("province");
+    const { data, error } = await supabase
+      .from("delivery_rate_cards")
+      .select("*")
+      .eq("province", province);
+
+    if (error)
+      return c.json(
+        { success: false, error: error.message },
+        500,
+      );
+    return c.json({ success: true, data });
+  },
+);
