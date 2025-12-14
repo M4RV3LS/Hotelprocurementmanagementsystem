@@ -3,12 +3,11 @@ import ItemConfiguration from "./configuration/ItemConfiguration";
 import VendorManagement from "./configuration/VendorManagement";
 import PaymentMethodConfiguration from "./configuration/PaymentMethodConfiguration";
 import ItemCategoryConfiguration from "./configuration/ItemCategoryConfiguration";
-import DeliveryFeeConfiguration from "./configuration/DeliveryFeeConfiguration"; // Import new component
 import { useConfigData } from "../hooks/useConfigData";
 
 export default function Configuration() {
   const [activeSubTab, setActiveSubTab] = useState<
-    "items" | "vendors" | "payment" | "categories" | "delivery"
+    "items" | "vendors" | "payment" | "categories"
   >("items");
   const configData = useConfigData();
 
@@ -34,7 +33,6 @@ export default function Configuration() {
           { id: "items", label: "Item Configuration" },
           { id: "vendors", label: "Vendor Management" },
           { id: "payment", label: "Payment Methods" },
-          { id: "delivery", label: "Delivery Fee" }, // New Tab
         ].map((tab) => (
           <button
             key={tab.id}
@@ -70,10 +68,10 @@ export default function Configuration() {
         />
       )}
       {activeSubTab === "payment" && (
-        <PaymentMethodConfiguration />
-      )}
-      {activeSubTab === "delivery" && (
-        <DeliveryFeeConfiguration />
+        <PaymentMethodConfiguration
+          paymentMethods={configData.paymentMethods}
+          onSavePaymentMethods={configData.savePaymentMethods}
+        />
       )}
     </div>
   );

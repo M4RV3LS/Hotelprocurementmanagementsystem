@@ -777,7 +777,6 @@ export const vendorsAPI = {
       vendorCode: v.code,
       vendorName: v.name,
       vendorRegion: v.region,
-      vendorRegency: v.regency, // <--- Requirement 1: Mapped here
       vendorAddress: v.address,
       vendorEmail: v.email,
       vendorPhone: v.phone,
@@ -797,7 +796,7 @@ export const vendorsAPI = {
       nibFileLink: v.nib_file_link,
       ktpNumber: v.ktp_number,
       ktpFileLink: v.ktp_file_link,
-      npwpd_number: v.npwpd_number,
+      npwpdNumber: v.npwpd_number,
       npwpdFileLink: v.npwpd_file_link,
       bankName: v.bank_name,
       bankAccountName: v.bank_account_name,
@@ -814,7 +813,7 @@ export const vendorsAPI = {
         agreementNumber: vi.agreement_number,
         taxPercentage: vi.wht_percentage || 0,
         propertyTypes: vi.property_types || [],
-        selectedPhotos: vi.selected_photos || [], // <--- Requirement 3: Ensure photos flow through
+        selectedPhotos: vi.selected_photos || [],
         masterPhotos: vi.master_item?.photos || [],
       })),
     }));
@@ -829,7 +828,6 @@ export const vendorsAPI = {
             code: vendor.vendorCode,
             name: vendor.vendorName,
             region: vendor.vendorRegion,
-            regency: vendor.vendorRegency, // <--- Requirement 1: Saved here
             address: vendor.vendorAddress,
             email: vendor.vendorEmail,
             phone: vendor.vendorPhone,
@@ -843,7 +841,6 @@ export const vendorsAPI = {
             agreement_link: vendor.vendorAgreementLink,
             agreements: vendor.agreements,
             delivery_fee: vendor.deliveryFee,
-            // Legal & Bank
             nib_number: vendor.nibNumber,
             nib_file_link: vendor.nibFileLink,
             ktp_number: vendor.ktpNumber,
@@ -892,7 +889,7 @@ export const vendorsAPI = {
             agreement_number: vItem.agreementNumber,
             wht_percentage: vItem.taxPercentage,
             property_types: vItem.propertyTypes || [],
-            selected_photos: vItem.selectedPhotos || [], // Persisting Requirement 3
+            selected_photos: vItem.selectedPhotos || [],
           };
         })
         .filter((i: any) => i !== null);
@@ -926,71 +923,35 @@ export const vendorsAPI = {
   },
 };
 
-const uploadFileToStorage = async (
-  file: File,
-  bucket: string,
-  folder: string,
-): Promise<string> => {
-  // Sanitize filename: remove special chars, spaces to underscores
-  const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-  const path = `${folder}/${Date.now()}_${safeName}`;
-
-  const { data, error } = await supabase.storage
-    .from(bucket)
-    .upload(path, file, {
-      upsert: true,
-      cacheControl: "3600",
-      contentType: file.type,
-    });
-
-  if (error) {
-    console.error(`Upload Error (${bucket}):`, error);
-    throw error;
-  }
-
-  const { data: publicUrlData } = supabase.storage
-    .from(bucket)
-    .getPublicUrl(data.path);
-
-  return publicUrlData.publicUrl;
-};
-
 // --- ITEMS API ---
 export const itemsAPI = {
   getAll: async (): Promise<any[]> => {
-    const { data, error } = await supabase.from("master_items")
+    const { data, error } = await supabase
+      .from("master_items")
       .select(`
         *,
-        category:item_categories(name, id)
-      `);
+        category:item_categories(name)
+      `)
+      .order("name");
 
-    if (error) throw error;
+    if (error) {
+      console.error("Error fetching items:", error);
+      return [];
+    }
 
-    if (!Array.isArray(data)) return [];
-
-    return data.map((i: any) => ({
+    return (data || []).map((i: any) => ({
       itemCode: i.code,
       itemName: i.name,
       brandName: i.brand_name,
+      // Priority: Relation Name > Fallback Text > Default
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
-      categoryId: i.category_id,
+      categoryId: i.category_id, // Critical for UI linking
       uom: i.uom,
       isActive: i.is_active,
       description: i.description,
-      photos: i.photos || [], // Ensure this array is passed
+      photos: i.photos || [],
     }));
-  },
-
-  // NEW: Upload Photo Function
-  uploadPhoto: async (file: File): Promise<string> => {
-    // Note: Ensure a bucket named 'item-photos' or 'public' exists in Supabase
-    // If not, use 'Delivery Proof' as a fallback since we know it exists from PO logic
-    return await uploadFileToStorage(
-      file,
-      "Delivery Proof",
-      "items",
-    );
   },
 
   save: async (item: any) => {
@@ -1006,15 +967,27 @@ export const itemsAPI = {
           uom: item.uom,
           is_active: item.isActive,
           description: item.description,
-          photos: item.photos, // Persist the real URLs array
+          photos: item.photos || [],
         },
-        { onConflict: "code" },
+        { onConflict: "code" }
       )
       .select()
       .single();
 
     if (error) throw error;
-    return item;
+
+    // Return in the same format as getAll
+    return {
+      itemCode: data.code,
+      itemName: data.name,
+      brandName: data.brand_name,
+      itemCategory: data.category,
+      categoryId: data.category_id,
+      uom: data.uom,
+      isActive: data.is_active,
+      description: data.description,
+      photos: data.photos || [],
+    };
   },
 
   delete: async (code: string) => {
@@ -1022,7 +995,7 @@ export const itemsAPI = {
       .from("master_items")
       .delete()
       .eq("code", code);
-
+    
     if (error) throw error;
   },
 };
@@ -1288,116 +1261,5 @@ export const itemCategoriesAPI = {
       .eq("id", id);
 
     if (error) throw error;
-  },
-};
-
-export const deliveryAPI = {
-  // Get global config
-  getGlobalConfig: async () => {
-    const { data, error } = await supabase
-      .from("delivery_global_config")
-      .select("*")
-      .single();
-    // If no config exists, return defaults (handled in UI)
-    if (error && error.code === "PGRST116") return null;
-    if (error) throw error;
-
-    return {
-      volumetricDivisor: data.volumetric_divisor,
-      minChargeableWeight: data.min_chargeable_weight,
-      insuranceRate: data.insurance_rate,
-      woodPackingFee: data.wood_packing_fee,
-      vatRate: data.vat_rate,
-    };
-  },
-
-  // Save global config
-  saveGlobalConfig: async (config: any) => {
-    // We assume there is only 1 row. We fetch it first to get ID or insert if empty.
-    const { data: existing } = await supabase
-      .from("delivery_global_config")
-      .select("id")
-      .single();
-
-    const payload = {
-      volumetric_divisor: config.volumetricDivisor,
-      min_chargeable_weight: config.minChargeableWeight,
-      insurance_rate: config.insuranceRate,
-      wood_packing_fee: config.woodPackingFee,
-      vat_rate: config.vatRate,
-    };
-
-    if (existing) {
-      const { error } = await supabase
-        .from("delivery_global_config")
-        .update(payload)
-        .eq("id", existing.id);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from("delivery_global_config")
-        .insert(payload);
-      if (error) throw error;
-    }
-  },
-
-  // Get list of provinces that already have configuration
-  getConfiguredProvinces: async (): Promise<string[]> => {
-    // Using a remote procedure call (RPC) is best for distinct, but for now we fetch all and distinct in JS
-    // or use a light query.
-    const { data, error } = await supabase
-      .from("delivery_rate_cards")
-      .select("province");
-    if (error) throw error;
-    const provinces = Array.from(
-      new Set(data.map((d: any) => d.province)),
-    );
-    return provinces as string[];
-  },
-
-  // Get rates for a specific province
-  getRateCards: async (province: string) => {
-    const { data, error } = await supabase
-      .from("delivery_rate_cards")
-      .select("*")
-      .eq("province", province);
-
-    if (error) throw error;
-    return data.map((r: any) => ({
-      originCity: r.origin_city,
-      destinationCity: r.destination_city,
-      serviceType: r.service_type,
-      slaEstimates: r.sla_estimates,
-      baseRatePerKg: r.base_rate_per_kg,
-      surchargeFixed: r.surcharge_fixed,
-      surchargePerKg: r.surcharge_per_kg,
-    }));
-  },
-
-  // Upload/Replace Rate Cards
-  uploadRateCards: async (province: string, rates: any[]) => {
-    // Transaction-like behavior: Delete old -> Insert new
-    const { error: deleteError } = await supabase
-      .from("delivery_rate_cards")
-      .delete()
-      .eq("province", province);
-    if (deleteError) throw deleteError;
-
-    const dbRows = rates.map((r) => ({
-      province,
-      origin_city: r.originCity,
-      destination_city: r.destinationCity,
-      service_type: r.serviceType,
-      sla_estimates: r.slaEstimates,
-      base_rate_per_kg: r.baseRatePerKg,
-      surcharge_fixed: r.surchargeFixed,
-      surcharge_per_kg: r.surchargePerKg,
-    }));
-
-    // Insert in chunks if large, but for now simple insert
-    const { error: insertError } = await supabase
-      .from("delivery_rate_cards")
-      .insert(dbRows);
-    if (insertError) throw insertError;
   },
 };

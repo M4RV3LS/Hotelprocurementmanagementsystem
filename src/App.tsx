@@ -169,18 +169,25 @@ export default function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
               </svg>
             </div>
-            <h2 className="text-gray-900 mb-2">Database Connection Error</h2>
+            <h2 className="text-gray-900 mb-2">Database Setup Required</h2>
             <p className="text-gray-600 mb-6">
               {error || configData.error}
             </p>
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6 text-left">
-              <h3 className="font-medium text-gray-900 mb-2">Possible Solutions:</h3>
-              <ul className="text-sm text-gray-600 space-y-2 list-disc list-inside">
-                <li>Verify that your Supabase database tables are created</li>
-                <li>Check your internet connection</li>
-                <li>Ensure the Supabase project is active</li>
-                <li>Try refreshing the page</li>
-              </ul>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 text-left">
+              <h3 className="font-medium text-gray-900 mb-2">📋 Database Setup Instructions:</h3>
+              <ol className="text-sm text-gray-700 space-y-2 list-decimal list-inside">
+                <li>Open your <strong>Supabase Dashboard</strong></li>
+                <li>Navigate to <strong>SQL Editor</strong></li>
+                <li>Copy the SQL from <code className="bg-white px-1 rounded">/supabase/migrations/001_initial_schema.sql</code></li>
+                <li>Paste and run the SQL to create all tables</li>
+                <li>Create a storage bucket named <strong>"Delivery Proof"</strong></li>
+                <li>Refresh this page - the app will auto-seed data</li>
+              </ol>
+              <div className="mt-4 pt-4 border-t border-blue-200">
+                <p className="text-xs text-gray-600">
+                  📖 See <strong>DATABASE_SETUP.md</strong> for detailed instructions
+                </p>
+              </div>
             </div>
             <button
               onClick={() => window.location.reload()}
