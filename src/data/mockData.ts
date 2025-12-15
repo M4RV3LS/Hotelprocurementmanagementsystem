@@ -15,12 +15,36 @@ export interface DeliveryProof {
   uploadedAt: string;
 }
 
-// New Interface for Categories
 export interface ItemCategory {
   id: string;
   name: string;
   itemCount?: number;
 }
+
+export const COMMODITIES_LIST = [
+  { code: "1001", name: "Textiles & Fabrics" },
+  { code: "1002", name: "Furniture & Fixtures" },
+  { code: "1003", name: "Electronics & Appliances" },
+  { code: "1004", name: "Cleaning Supplies" },
+  { code: "1005", name: "Food & Beverage" },
+  { code: "1006", name: "Office Supplies" },
+  { code: "1007", name: "Construction Materials" },
+  { code: "1008", name: "IT Equipment" },
+];
+
+export const BRAND_NAMES = [
+  "Reddoorz",
+  "Reddoorz Premium",
+  "RedLiving",
+  "Sans",
+  "Sans Vibe",
+  "Sans Stay",
+  "Sans Elite",
+  "Urban View",
+  "The Lavana",
+  "No Branding",
+  "Vibes by SANS",
+];
 
 export type ProcurementStatus =
   | "Review by Procurement"
@@ -104,8 +128,11 @@ export interface ProcurementItem {
   itemName: string;
   itemCategory: string; // Display Name
   categoryId?: string; // Link ID
-  description?: string; // New Field
-  photos?: string[]; // New Field
+  description?: string;
+  photos?: string[];
+  // New Fields for Commodities
+  commodityCode?: string;
+  commodityName?: string;
   selectedProperties: Record<string, string>;
   quantity: number;
   uom: string;

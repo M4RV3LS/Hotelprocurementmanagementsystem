@@ -2,37 +2,16 @@ import { useState, useEffect } from "react";
 import { X, Image as ImageIcon } from "lucide-react";
 import { itemCategoriesAPI } from "../../utils/api";
 import type { Item } from "../../data/mockData";
+import {
+  BRAND_NAMES,
+  COMMODITIES_LIST,
+} from "../../data/mockData";
 
 interface ItemFormModalProps {
   item: Item | null;
   onClose: () => void;
   onSave: (item: Item) => void;
 }
-
-const brandNames = [
-  "Reddoorz",
-  "Reddoorz Premium",
-  "RedLiving",
-  "Sans",
-  "Sans Vibe",
-  "Sans Stay",
-  "Sans Elite",
-  "Urban View",
-  "The Lavana",
-  "No Branding",
-  "Vibes by SANS",
-];
-
-const categories = ["Branding Item", "Ops Item", "Others"];
-const commonUoM = [
-  "pcs",
-  "units",
-  "meters",
-  "liters",
-  "kg",
-  "sets",
-  "custom",
-];
 
 export default function ItemFormModal({
   item,
@@ -50,6 +29,8 @@ export default function ItemFormModal({
       description: "",
       photos: [],
       isActive: true,
+      commodityCode: "",
+      commodityName: "",
     },
   );
 
@@ -63,7 +44,7 @@ export default function ItemFormModal({
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
-      // Mock URL for display
+      // Mock URL for display - in prod upload to storage first
       const url = URL.createObjectURL(e.target.files[0]);
       setFormData((prev: any) => ({
         ...prev,
@@ -154,12 +135,12 @@ export default function ItemFormModal({
                 />
               </div>
 
+              {/* Requirement 6: Brand Dropdown */}
               <div>
                 <label className="block text-gray-700 mb-2">
                   Brand Name
                 </label>
-                <input
-                  type="text"
+                <select
                   value={formData.brandName}
                   onChange={(e) =>
                     handleInputChange(
@@ -168,10 +149,44 @@ export default function ItemFormModal({
                     )
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                />
+                >
+                  <option value="">Select Brand</option>
+                  {BRAND_NAMES.map((brand) => (
+                    <option key={brand} value={brand}>
+                      {brand}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {/* Requirement 1: Category Dropdown */}
+              {/* Requirement 3: Commodities Dropdown */}
+              <div>
+                <label className="block text-gray-700 mb-2">
+                  Commodities Name
+                </label>
+                <select
+                  value={formData.commodityCode}
+                  onChange={(e) => {
+                    const selected = COMMODITIES_LIST.find(
+                      (c) => c.code === e.target.value,
+                    );
+                    setFormData({
+                      ...formData,
+                      commodityCode: selected?.code || "",
+                      commodityName: selected?.name || "",
+                    });
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                >
+                  <option value="">Select Commodity</option>
+                  {COMMODITIES_LIST.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.code} - {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-gray-700 mb-2">
                   Item Category
@@ -217,7 +232,6 @@ export default function ItemFormModal({
               </div>
             </div>
 
-            {/* Requirement 3: Description Field */}
             <div>
               <label className="block text-gray-700 mb-2">
                 Description
@@ -235,7 +249,6 @@ export default function ItemFormModal({
               />
             </div>
 
-            {/* Requirement 2: Multiple Photos */}
             <div>
               <label className="block text-gray-700 mb-2">
                 Item Photos

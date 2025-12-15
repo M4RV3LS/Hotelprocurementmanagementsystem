@@ -5,19 +5,17 @@ import {
   Trash2,
   FileText,
   CheckCircle,
-  Link as LinkIcon,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
-import MultiSelectDropdown from "./MultiSelectDropdown";
-import { INDONESIA_REGIONS } from "../../data/mockData";
-import ConfirmationModal from "./ConfirmationModal";
 
 // --- Interfaces ---
 
 interface Agreement {
   id: string;
   type: "Agreement" | "Offering";
-  number: string;
+  documentNumber: string;
   startDate: string;
   endDate: string;
   documentLink?: string;
@@ -34,28 +32,48 @@ interface VendorItem {
   agreementNumber: string;
   taxPercentage: number;
   propertyTypes: string[];
-  selectedPhotos: string[]; // For storing selected photo URLs
-  masterPhotos?: string[]; // Read-only from master item for selection context
+  selectedPhotos: string[];
+  masterPhotos?: string[];
 }
 
-// Extended Vendor interface to include new fields
+// Extended Vendor interface
 interface ExtendedVendor
   extends Omit<Vendor, "agreements" | "items"> {
   agreements: Agreement[];
   items: VendorItem[];
   deliveryFee?: number;
-  // Legal & Admin Fields
+
+  // Requirement 1: Complete Legal & Admin Fields
   nibNumber?: string;
   nibFileLink?: string;
   ktpNumber?: string;
   ktpFileLink?: string;
-  npwpdNumber?: string;
-  npwpdFileLink?: string;
+  npwpNumber?: string;
+  npwpFileLink?: string;
+  sppkpNumber?: string;
+  sppkpFileLink?: string;
+  deedNumber?: string;
+  deedFileLink?: string;
+  sbuNumber?: string;
+  sbuFileLink?: string;
+  constructionNumber?: string;
+  constructionFileLink?: string;
+  localTaxNumber?: string;
+  localTaxFileLink?: string;
+  corNumber?: string;
+  corFileLink?: string;
+  gptcNumber?: string;
+  gptcFileLink?: string;
+  otherLicenseFileLink?: string;
+
   bankName?: string;
   bankAccountName?: string;
   bankAccountNumber?: string;
   bankAccountDocLink?: string;
   legalDocLink?: string;
+
+  picName?: string;
+  email2?: string;
 }
 
 interface VendorFormModalProps {
@@ -63,65 +81,73 @@ interface VendorFormModalProps {
   onClose: () => void;
   onSave: (vendor: ExtendedVendor) => void;
   activePaymentMethods: string[];
-  items: any[]; // Master items list for lookup
+  items: any[];
 }
 
 const PROPERTY_TYPES = ["Franchise", "Leasing", "Management"];
 
-// --- Helper Component ---
+// --- Helpers ---
 
-const FileUploadField = ({
+const handleImageError = (
+  e: React.SyntheticEvent<HTMLImageElement, Event>,
+) => {
+  e.currentTarget.src =
+    "https://placehold.co/150x150?text=No+Image";
+};
+
+const ReadOnlyField = ({
   label,
   value,
-  onChange,
 }: {
   label: string;
-  value: string;
-  onChange: (url: string) => void;
+  value: string | number | undefined;
 }) => (
-  <div>
-    <label className="block text-xs font-medium text-gray-700 mb-1">
+  <div className="mb-2">
+    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
       {label}
     </label>
-    <div className="flex gap-2 items-center">
-      {value ? (
-        <span className="text-xs text-green-600 flex items-center gap-1 bg-green-50 px-2 py-1 rounded border border-green-200">
-          <FileText className="w-3 h-3" /> File Attached
-        </span>
-      ) : (
-        <span className="text-xs text-gray-400 italic">
-          No file
-        </span>
-      )}
-      <label className="cursor-pointer text-xs text-blue-600 hover:underline font-medium">
-        Upload
-        <input
-          type="file"
-          className="hidden"
-          accept=".pdf,.png,.jpg,.jpeg"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              // In a real app, upload logic goes here. For Figma prototype, we use blob URL.
-              onChange(URL.createObjectURL(e.target.files[0]));
-            }
-          }}
-        />
-      </label>
+    <div className="text-gray-900 bg-gray-50 border border-gray-200 rounded px-3 py-2 text-sm min-h-[38px] flex items-center">
+      {value || "-"}
     </div>
   </div>
 );
 
-// --- Main Component ---
+const ReadOnlyFileLink = ({
+  label,
+  link,
+}: {
+  label: string;
+  link?: string;
+}) => (
+  <div className="mb-2">
+    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+      {label}
+    </label>
+    {link ? (
+      <a
+        href={link}
+        target="_blank"
+        rel="noreferrer"
+        className="text-blue-600 hover:underline text-sm flex items-center gap-1 h-[38px]"
+      >
+        <FileText className="w-3 h-3" /> View Document
+      </a>
+    ) : (
+      <span className="text-sm text-gray-400 italic h-[38px] flex items-center">
+        No document
+      </span>
+    )}
+  </div>
+);
 
 export default function VendorFormModalUpdated({
   vendor,
   onClose,
   onSave,
-  activePaymentMethods,
   items,
 }: VendorFormModalProps) {
-  // Initialize form state
-  const [formData, setFormData] = useState<ExtendedVendor>(
+  // Main Form State
+  const [formData] = useState<ExtendedVendor>(
     vendor || {
       vendorCode: "",
       vendorName: "",
@@ -138,50 +164,27 @@ export default function VendorFormModalUpdated({
       agreements: [],
       items: [],
       isActive: true,
-      // New Fields Defaults
       nibNumber: "",
-      nibFileLink: "",
       ktpNumber: "",
-      ktpFileLink: "",
-      npwpdNumber: "",
-      npwpdFileLink: "",
+      npwpNumber: "",
       bankName: "",
       bankAccountName: "",
       bankAccountNumber: "",
-      bankAccountDocLink: "",
-      legalDocLink: "",
     },
   );
 
-  // Local state for complex fields
-  const [selectedRegions, setSelectedRegions] = useState<
-    string[]
-  >(
-    Array.isArray(formData.vendorRegion)
-      ? formData.vendorRegion
-      : formData.vendorRegion
-        ? [formData.vendorRegion]
-        : [],
-  );
-
-  const [selectedPaymentMethods, setSelectedPaymentMethods] =
-    useState<string[]>(formData.paymentMethods || []);
-
+  // Vendor Items State
   const [vendorItems, setVendorItems] = useState<VendorItem[]>(
     (formData.items || []).map((i) => ({
       ...i,
+      multipleOf: i.multipleOf || 1,
       selectedPhotos: i.selectedPhotos || [],
-      // Hydrate master photos if editing an existing vendor item, finding match in master items list
       masterPhotos:
         i.masterPhotos ||
         items.find((mi: any) => mi.itemCode === i.itemCode)
           ?.photos ||
         [],
     })),
-  );
-
-  const [agreements, setAgreements] = useState<Agreement[]>(
-    formData.agreements || [],
   );
 
   // Modal States
@@ -204,55 +207,8 @@ export default function VendorFormModalUpdated({
     selectedPhotos: [],
   });
 
-  const [duplicateWarning, setDuplicateWarning] = useState<{
-    isOpen: boolean;
-    itemToAdd: VendorItem | null;
-  }>({
-    isOpen: false,
-    itemToAdd: null,
-  });
-
   // --- Handlers ---
 
-  const handleInputChange = (
-    field: keyof ExtendedVendor,
-    value: any,
-  ) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleAgreementChange = (
-    index: number,
-    field: keyof Agreement,
-    value: string,
-  ) => {
-    setAgreements((prev) =>
-      prev.map((agr, idx) =>
-        idx === index ? { ...agr, [field]: value } : agr,
-      ),
-    );
-  };
-
-  const handleAddAgreement = () => {
-    setAgreements([
-      ...agreements,
-      {
-        id: `agr-${Date.now()}`,
-        type: "Agreement",
-        number: "",
-        startDate: "",
-        endDate: "",
-        link: "",
-        documentLink: "",
-      },
-    ]);
-  };
-
-  const handleRemoveAgreement = (index: number) => {
-    setAgreements((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Item Logic
   const handleItemSelect = (itemCode: string) => {
     const selectedItem = items.find(
       (i: any) => i.itemCode === itemCode,
@@ -263,18 +219,25 @@ export default function VendorFormModalUpdated({
         itemCode: selectedItem.itemCode,
         itemName: selectedItem.itemName,
         masterPhotos: selectedItem.photos || [],
-        selectedPhotos: [], // Reset selection for new item
+        selectedPhotos: [],
       });
     }
   };
 
   const handleAddItemToVendor = () => {
-    if (!newItem.itemCode || newItem.minQuantity <= 0) {
-      alert("Please fill in item code and minimum quantity");
-      return;
-    }
+    if (!newItem.itemCode)
+      return alert("Please select an item");
+    if (newItem.minQuantity <= 0)
+      return alert("Min Qty must be > 0");
+    if (newItem.multipleOf <= 0)
+      return alert("Multiple Of must be > 0");
 
-    // Check duplicates logic could go here similar to previous version
+    if (newItem.priceType === "Fixed") {
+      if (!newItem.agreementNumber)
+        return alert("Fixed Price requires an Agreement");
+      if (newItem.unitPrice <= 0)
+        return alert("Fixed Price requires Unit Price > 0");
+    }
 
     if (editingItemIndex !== null) {
       setVendorItems((prev) =>
@@ -287,7 +250,6 @@ export default function VendorFormModalUpdated({
       setVendorItems((prev) => [...prev, newItem]);
     }
 
-    // Reset
     setNewItem({
       itemCode: "",
       itemName: "",
@@ -309,21 +271,25 @@ export default function VendorFormModalUpdated({
     setShowAddItem(true);
   };
 
-  const togglePhotoSelection = (
-    itemIndex: number,
-    photoUrl: string,
-  ) => {
+  // --- Tick All Logic ---
+  const isAllSelected = (type: string) => {
+    if (vendorItems.length === 0) return false;
+    return vendorItems.every((item) =>
+      item.propertyTypes.includes(type),
+    );
+  };
+
+  const handleToggleAll = (type: string) => {
+    const allSelected = isAllSelected(type);
     setVendorItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== itemIndex) return item;
-        const currentSelected = item.selectedPhotos || [];
-        const isSelected = currentSelected.includes(photoUrl);
-        return {
-          ...item,
-          selectedPhotos: isSelected
-            ? currentSelected.filter((p) => p !== photoUrl)
-            : [...currentSelected, photoUrl],
-        };
+      prev.map((item) => {
+        const types = new Set(item.propertyTypes);
+        if (allSelected) {
+          types.delete(type);
+        } else {
+          types.add(type);
+        }
+        return { ...item, propertyTypes: Array.from(types) };
       }),
     );
   };
@@ -343,18 +309,21 @@ export default function VendorFormModalUpdated({
     );
   };
 
-  const handleSave = () => {
-    if (!formData.vendorCode || !formData.vendorName) {
-      alert("Please fill in Vendor Code and Vendor Name");
-      return;
-    }
+  const togglePhoto = (photoUrl: string) => {
+    const current = newItem.selectedPhotos;
+    const exists = current.includes(photoUrl);
+    setNewItem({
+      ...newItem,
+      selectedPhotos: exists
+        ? current.filter((p) => p !== photoUrl)
+        : [...current, photoUrl],
+    });
+  };
 
+  const handleSave = () => {
     onSave({
       ...formData,
-      vendorRegion: selectedRegions,
-      paymentMethods: selectedPaymentMethods,
       items: vendorItems,
-      agreements: agreements,
     });
   };
 
@@ -365,516 +334,290 @@ export default function VendorFormModalUpdated({
         onClick={onClose}
       />
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-7xl max-h-[95vh] overflow-y-auto">
           {/* Header */}
           <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
             <h2 className="text-gray-900 font-bold text-lg">
-              {vendor ? "Edit Vendor" : "Add New Vendor"}
+              {vendor
+                ? "Vendor Details (Read Only)"
+                : "New Vendor"}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
           <div className="px-6 py-6 space-y-8">
-            {/* 1. Basic Information */}
+            {/* 1. General Information */}
             <section>
-              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
-                Basic Information
+              <h3 className="text-gray-900 font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                  1
+                </span>
+                General Information
               </h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Vendor Code{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    value={formData.vendorCode}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorCode",
-                        e.target.value,
-                      )
-                    }
-                    placeholder="VND001"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Vendor Name{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    value={formData.vendorName}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorName",
-                        e.target.value,
-                      )
-                    }
-                    placeholder="PT Example"
-                  />
-                </div>
-                <div>
-                  <MultiSelectDropdown
-                    options={INDONESIA_REGIONS}
-                    selectedValues={selectedRegions}
-                    onChange={setSelectedRegions}
-                    label="Regions"
-                    placeholder="Select Regions"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    value={formData.vendorEmail}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorEmail",
-                        e.target.value,
-                      )
-                    }
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Address
-                  </label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    rows={2}
+              <div className="grid grid-cols-3 gap-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
+                <ReadOnlyField
+                  label="Vendor Code"
+                  value={formData.vendorCode}
+                />
+                <ReadOnlyField
+                  label="Vendor Name"
+                  value={formData.vendorName}
+                />
+                <ReadOnlyField
+                  label="PIC Name"
+                  value={formData.picName}
+                />
+                <div className="col-span-3">
+                  <ReadOnlyField
+                    label="Address"
                     value={formData.vendorAddress}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorAddress",
-                        e.target.value,
-                      )
-                    }
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Phone
+                <div className="col-span-3">
+                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+                    Regional Coverage
                   </label>
-                  <input
-                    className="w-full border border-gray-300 rounded-lg p-2 focus:ring-2 focus:ring-[#ec2224] outline-none"
-                    value={formData.vendorPhone}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "vendorPhone",
-                        e.target.value,
-                      )
-                    }
-                  />
+                  <div className="flex flex-wrap gap-2">
+                    {Array.isArray(formData.vendorRegion) &&
+                    formData.vendorRegion.length > 0 ? (
+                      formData.vendorRegion.map((r, i) => (
+                        <span
+                          key={i}
+                          className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded border border-blue-200"
+                        >
+                          {r}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500">
+                        -
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
 
-            {/* 2. Legal & Admin Information (New) */}
+            {/* 2. Legal & Admin Information (Requirement 1: Added all requested fields) */}
             <section>
-              <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
+              <h3 className="text-gray-900 font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                  2
+                </span>
                 Legal & Admin Information
               </h3>
-              <div className="bg-gray-50 p-5 rounded-lg border border-gray-200">
-                <div className="grid grid-cols-3 gap-6 mb-6">
-                  {/* NIB */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        NIB Number
-                      </label>
-                      <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        value={formData.nibNumber}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "nibNumber",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <FileUploadField
-                      label="NIB Document"
-                      value={formData.nibFileLink || ""}
-                      onChange={(url) =>
-                        handleInputChange("nibFileLink", url)
-                      }
-                    />
-                  </div>
-                  {/* KTP */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        KTP Number
-                      </label>
-                      <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        value={formData.ktpNumber}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "ktpNumber",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <FileUploadField
-                      label="KTP Document"
-                      value={formData.ktpFileLink || ""}
-                      onChange={(url) =>
-                        handleInputChange("ktpFileLink", url)
-                      }
-                    />
-                  </div>
-                  {/* NPWPD */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        NPWP Number
-                      </label>
-                      <input
-                        className="w-full border border-gray-300 rounded p-2 text-sm"
-                        value={formData.npwpdNumber}
-                        onChange={(e) =>
-                          handleInputChange(
-                            "npwpdNumber",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <FileUploadField
-                      label="NPWPD Document"
-                      value={formData.npwpdFileLink || ""}
-                      onChange={(url) =>
-                        handleInputChange("npwpdFileLink", url)
-                      }
-                    />
-                  </div>
-                </div>
+              <div className="grid grid-cols-4 gap-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
+                <ReadOnlyField
+                  label="Vendor Type"
+                  value={formData.vendorType}
+                />
+                <div className="col-span-3"></div>
 
-                <div className="border-t border-gray-200 pt-4 grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Bank Name
-                    </label>
-                    <select
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      value={formData.bankName}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "bankName",
-                          e.target.value,
-                        )
-                      }
-                    >
-                      <option value="">Select Bank</option>
-                      <option value="BCA">BCA</option>
-                      <option value="Mandiri">Mandiri</option>
-                      <option value="BNI">BNI</option>
-                      <option value="BRI">BRI</option>
-                      <option value="CIMB Niaga">
-                        CIMB Niaga
-                      </option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Account Name
-                    </label>
-                    <input
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      value={formData.bankAccountName}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "bankAccountName",
-                          e.target.value,
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Account Number
-                    </label>
-                    <input
-                      className="w-full border border-gray-300 rounded p-2 text-sm"
-                      value={formData.bankAccountNumber}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "bankAccountNumber",
-                          e.target.value,
-                        )
-                      }
-                    />
-                  </div>
-                  <div className="pt-6">
-                    <FileUploadField
-                      label="Bank Document"
-                      value={formData.bankAccountDocLink || ""}
-                      onChange={(url) =>
-                        handleInputChange(
-                          "bankAccountDocLink",
-                          url,
-                        )
-                      }
-                    />
-                  </div>
-                </div>
+                {/* Standard Fields */}
+                <ReadOnlyField
+                  label="NPWP Number"
+                  value={formData.npwpNumber}
+                />
+                <ReadOnlyFileLink
+                  label="NPWP Doc"
+                  link={formData.npwpFileLink}
+                />
+
+                <ReadOnlyField
+                  label="NIB Number"
+                  value={formData.nibNumber}
+                />
+                <ReadOnlyFileLink
+                  label="NIB Doc"
+                  link={formData.nibFileLink}
+                />
+
+                <ReadOnlyField
+                  label="KTP Number"
+                  value={formData.ktpNumber}
+                />
+                <ReadOnlyFileLink
+                  label="KTP Doc"
+                  link={formData.ktpFileLink}
+                />
+
+                {/* Additional Requested Fields */}
+                <ReadOnlyField
+                  label="SPPKP Number"
+                  value={formData.sppkpNumber}
+                />
+                <ReadOnlyFileLink
+                  label="SPPKP Doc"
+                  link={formData.sppkpFileLink}
+                />
+
+                <ReadOnlyField
+                  label="Deed Number"
+                  value={formData.deedNumber}
+                />
+                <ReadOnlyFileLink
+                  label="Deed Doc"
+                  link={formData.deedFileLink}
+                />
+
+                <ReadOnlyField
+                  label="SBU Number"
+                  value={formData.sbuNumber}
+                />
+                <ReadOnlyFileLink
+                  label="SBU Doc"
+                  link={formData.sbuFileLink}
+                />
+
+                <ReadOnlyField
+                  label="Construction Lic."
+                  value={formData.constructionNumber}
+                />
+                <ReadOnlyFileLink
+                  label="Construction Doc"
+                  link={formData.constructionFileLink}
+                />
+
+                <ReadOnlyField
+                  label="Local Tax Reg"
+                  value={formData.localTaxNumber}
+                />
+                <ReadOnlyFileLink
+                  label="Local Tax Doc"
+                  link={formData.localTaxFileLink}
+                />
+
+                <ReadOnlyField
+                  label="COR Number"
+                  value={formData.corNumber}
+                />
+                <ReadOnlyFileLink
+                  label="COR Doc"
+                  link={formData.corFileLink}
+                />
+
+                <ReadOnlyField
+                  label="GPTC Number"
+                  value={formData.gptcNumber}
+                />
+                <ReadOnlyFileLink
+                  label="GPTC Doc"
+                  link={formData.gptcFileLink}
+                />
+
+                <div className="col-span-1"></div>
+                <ReadOnlyFileLink
+                  label="Other License (File Only)"
+                  link={formData.otherLicenseFileLink}
+                />
+              </div>
+
+              <h4 className="text-gray-700 font-medium mt-4 mb-2 pl-4">
+                Bank Information
+              </h4>
+              <div className="grid grid-cols-3 gap-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
+                <ReadOnlyField
+                  label="Bank Name"
+                  value={formData.bankName}
+                />
+                <ReadOnlyField
+                  label="Account Name"
+                  value={formData.bankAccountName}
+                />
+                <ReadOnlyField
+                  label="Account Number"
+                  value={formData.bankAccountNumber}
+                />
+                <ReadOnlyFileLink
+                  label="Bank Document"
+                  link={formData.bankAccountDocLink}
+                />
               </div>
             </section>
 
             {/* 3. Tax & Fees */}
-            <section className="border-t border-gray-200 pt-6">
-              <h3 className="text-gray-900 mb-4 font-medium">
-                Tax & Fees Configuration
+            <section>
+              <h3 className="text-gray-900 font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                  3
+                </span>
+                Tax Configuration
               </h3>
-              <div className="grid grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    PPN (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                    value={formData.ppnPercentage}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "ppnPercentage",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Service Charge (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                    value={formData.serviceChargePercentage}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "serviceChargePercentage",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    PB1 (%)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                    value={formData.pb1Percentage}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "pb1Percentage",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">
-                    Delivery Fee
-                  </label>
-                  <input
-                    type="number"
-                    className="w-full border border-gray-300 rounded-lg p-2"
-                    value={formData.deliveryFee}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "deliveryFee",
-                        parseFloat(e.target.value) || 0,
-                      )
-                    }
-                  />
-                </div>
+              <div className="grid grid-cols-4 gap-6 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
+                <ReadOnlyField
+                  label="PPN (%)"
+                  value={formData.ppnPercentage}
+                />
+                <ReadOnlyField
+                  label="Service Charge (%)"
+                  value={formData.serviceChargePercentage}
+                />
+                <ReadOnlyField
+                  label="PB1 (%)"
+                  value={formData.pb1Percentage}
+                />
               </div>
             </section>
 
-            {/* 4. Payment Methods */}
-            <section className="border-t border-gray-200 pt-6">
-              <MultiSelectDropdown
-                options={activePaymentMethods}
-                selectedValues={selectedPaymentMethods}
-                onChange={setSelectedPaymentMethods}
-                label="Payment Methods"
-                placeholder="Select payment methods"
-              />
-            </section>
-
-            {/* 5. Agreements */}
-            <section className="border-t border-gray-200 pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-gray-900 font-medium">
-                  Agreements / Offerings
-                </h3>
-                <button
-                  onClick={handleAddAgreement}
-                  className="text-[#ec2224] hover:text-[#d11f21] text-sm flex items-center gap-1 font-medium"
-                >
-                  <Plus className="w-4 h-4" /> Add Document
-                </button>
+            {/* 4. Agreements */}
+            <section>
+              <h3 className="text-gray-900 font-bold mb-4 border-b pb-2 flex items-center gap-2">
+                <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                  4
+                </span>
+                Agreements / Offerings
+              </h3>
+              <div className="space-y-3">
+                {formData.agreements?.map((agr, idx) => (
+                  <div
+                    key={idx}
+                    className="border border-gray-200 rounded p-3 flex justify-between items-center bg-gray-50"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">
+                        {agr.documentNumber}{" "}
+                        <span className="text-gray-500 font-normal">
+                          ({agr.type})
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {agr.startDate} - {agr.endDate}
+                      </p>
+                    </div>
+                    {agr.link && (
+                      <a
+                        href={agr.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-600 hover:underline text-sm"
+                      >
+                        View Link
+                      </a>
+                    )}
+                  </div>
+                ))}
+                {(!formData.agreements ||
+                  formData.agreements.length === 0) && (
+                  <p className="text-gray-400 italic text-sm">
+                    No agreements listed.
+                  </p>
+                )}
               </div>
-              {agreements.map((agreement, index) => (
-                <div
-                  key={agreement.id}
-                  className="border border-gray-200 rounded-lg p-4 mb-3 bg-gray-50"
-                >
-                  <div className="flex justify-between mb-3">
-                    <h4 className="text-sm font-medium text-gray-700">
-                      Document {index + 1}
-                    </h4>
-                    <button
-                      onClick={() =>
-                        handleRemoveAgreement(index)
-                      }
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Number
-                      </label>
-                      <input
-                        className="w-full border rounded p-2 text-sm"
-                        value={agreement.number}
-                        onChange={(e) =>
-                          handleAgreementChange(
-                            index,
-                            "number",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Type
-                      </label>
-                      <div className="flex gap-3 mt-2">
-                        <label className="flex items-center gap-1 text-sm cursor-pointer">
-                          <input
-                            type="radio"
-                            checked={
-                              agreement.type === "Agreement"
-                            }
-                            onChange={() =>
-                              handleAgreementChange(
-                                index,
-                                "type",
-                                "Agreement",
-                              )
-                            }
-                            className="text-[#ec2224]"
-                          />{" "}
-                          Agreement
-                        </label>
-                        <label className="flex items-center gap-1 text-sm cursor-pointer">
-                          <input
-                            type="radio"
-                            checked={
-                              agreement.type === "Offering"
-                            }
-                            onChange={() =>
-                              handleAgreementChange(
-                                index,
-                                "type",
-                                "Offering",
-                              )
-                            }
-                            className="text-[#ec2224]"
-                          />{" "}
-                          Offering
-                        </label>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Start Date
-                      </label>
-                      <input
-                        type="date"
-                        className="w-full border rounded p-2 text-sm"
-                        value={agreement.startDate}
-                        onChange={(e) =>
-                          handleAgreementChange(
-                            index,
-                            "startDate",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">
-                        End Date
-                      </label>
-                      <input
-                        type="date"
-                        className="w-full border rounded p-2 text-sm"
-                        value={agreement.endDate}
-                        onChange={(e) =>
-                          handleAgreementChange(
-                            index,
-                            "endDate",
-                            e.target.value,
-                          )
-                        }
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="block text-xs text-gray-600 mb-1">
-                        Link
-                      </label>
-                      <div className="relative">
-                        <LinkIcon className="absolute left-2 top-2.5 w-4 h-4 text-gray-400" />
-                        <input
-                          type="url"
-                          className="w-full border rounded p-2 pl-8 text-sm"
-                          placeholder="https://"
-                          value={agreement.link}
-                          onChange={(e) =>
-                            handleAgreementChange(
-                              index,
-                              "link",
-                              e.target.value,
-                            )
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </section>
 
-            {/* 6. Vendor Items with Photo Selection */}
-            <section className="border-t border-gray-200 pt-6">
+            {/* 5. Vendor Item Configuration (Editable Table) */}
+            <section className="border-t-4 border-[#ec2224] pt-6 mt-8">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-gray-900 font-medium">
-                  Vendor Item Configuration
+                <h3 className="text-gray-900 font-bold text-lg flex items-center gap-2">
+                  <span className="bg-[#ec2224] text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">
+                    5
+                  </span>
+                  Vendor Item Configuration (Editable)
                 </h3>
                 <button
                   onClick={() => {
@@ -899,157 +642,161 @@ export default function VendorFormModalUpdated({
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {vendorItems.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 border border-dashed rounded-lg">
-                    No items configured yet.
-                  </div>
-                )}
-
-                {vendorItems.map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm"
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-semibold text-gray-900 text-lg">
-                          {item.itemName}
-                        </h4>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                          {item.itemCode}
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEditItem(idx)}
-                          className="text-blue-600 text-sm hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() =>
-                            setVendorItems((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            )
-                          }
-                          className="text-red-600 hover:bg-red-50 p-1 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Item Details Grid */}
-                    <div className="grid grid-cols-4 gap-4 text-sm text-gray-600 mb-4">
-                      <div>
-                        <span className="block text-xs text-gray-400">
-                          Price Type
-                        </span>{" "}
-                        {item.priceType}
-                      </div>
-                      <div>
-                        <span className="block text-xs text-gray-400">
-                          Unit Price
-                        </span>{" "}
-                        Rp {item.unitPrice.toLocaleString()}
-                      </div>
-                      <div>
-                        <span className="block text-xs text-gray-400">
-                          Min Qty
-                        </span>{" "}
-                        {item.minQuantity}
-                      </div>
-                      <div>
-                        <span className="block text-xs text-gray-400">
-                          WHT
-                        </span>{" "}
-                        {item.taxPercentage}%
-                      </div>
-                    </div>
-
-                    {/* Property Type Toggles */}
-                    <div className="flex gap-2 mb-4">
+              <div className="overflow-x-auto border rounded-lg shadow-sm">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-100 text-gray-700 uppercase font-semibold text-xs border-b">
+                    <tr>
+                      <th className="px-4 py-3 min-w-[150px]">
+                        Item
+                      </th>
+                      <th className="px-4 py-3">Price Type</th>
+                      <th className="px-4 py-3">Unit Price</th>
+                      <th className="px-4 py-3">Min Qty</th>
+                      <th className="px-4 py-3">Multiple Of</th>
+                      <th className="px-4 py-3">Agreement</th>
+                      {/* Tick All Headers */}
                       {PROPERTY_TYPES.map((type) => (
-                        <button
+                        <th
                           key={type}
-                          onClick={() =>
-                            handleToggleCell(idx, type)
-                          }
-                          className={`px-3 py-1 rounded text-xs border flex items-center gap-1 transition-colors ${item.propertyTypes.includes(type) ? "bg-green-50 border-green-200 text-green-700" : "bg-gray-50 border-gray-200 text-gray-500"}`}
+                          className="px-4 py-3 text-center w-[100px]"
                         >
-                          {item.propertyTypes.includes(type) ? (
-                            <CheckCircle className="w-3 h-3" />
-                          ) : (
-                            <div className="w-3 h-3 rounded-full border border-gray-400" />
-                          )}
-                          {type}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Photo Selection */}
-                    {item.masterPhotos &&
-                      item.masterPhotos.length > 0 && (
-                        <div className="border-t border-gray-100 pt-3">
-                          <p className="text-xs font-medium text-gray-700 mb-2">
-                            Select photos to display for this
-                            vendor:
-                          </p>
-                          <div className="flex gap-3 overflow-x-auto pb-2">
-                            {item.masterPhotos.map(
-                              (photo: string, pIdx: number) => {
-                                const isSelected =
-                                  item.selectedPhotos?.includes(
-                                    photo,
-                                  );
-                                return (
-                                  <div
-                                    key={pIdx}
-                                    onClick={() =>
-                                      togglePhotoSelection(
-                                        idx,
-                                        photo,
-                                      )
-                                    }
-                                    className={`relative flex-shrink-0 w-20 h-20 border-2 cursor-pointer rounded-lg overflow-hidden transition-all ${isSelected ? "border-green-500 ring-2 ring-green-100" : "border-gray-200 opacity-60 hover:opacity-100"}`}
-                                  >
-                                    <img
-                                      src={photo}
-                                      className="w-full h-full object-cover"
-                                      alt="Item Preview"
-                                    />
-                                    {isSelected && (
-                                      <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
-                                        <CheckCircle className="w-3 h-3" />
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              },
-                            )}
+                          <div
+                            className="flex flex-col items-center gap-1 cursor-pointer group"
+                            onClick={() =>
+                              handleToggleAll(type)
+                            }
+                          >
+                            <span>{type}</span>
+                            <div
+                              className={`p-0.5 rounded ${isAllSelected(type) ? "text-green-600" : "text-gray-400 group-hover:text-gray-600"}`}
+                            >
+                              {isAllSelected(type) ? (
+                                <CheckSquare className="w-4 h-4" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                  </div>
-                ))}
+                        </th>
+                      ))}
+                      <th className="px-4 py-3 text-center">
+                        Photos
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 bg-white">
+                    {vendorItems.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        className="hover:bg-gray-50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-gray-900">
+                            {item.itemName}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {item.itemCode}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.priceType}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.priceType === "Fixed"
+                            ? `Rp ${item.unitPrice.toLocaleString()}`
+                            : "-"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.minQuantity}
+                        </td>
+                        <td className="px-4 py-3">
+                          {item.multipleOf}
+                        </td>
+                        <td
+                          className="px-4 py-3 text-xs text-gray-600 truncate max-w-[100px]"
+                          title={item.agreementNumber}
+                        >
+                          {item.agreementNumber || "-"}
+                        </td>
+                        {PROPERTY_TYPES.map((type) => (
+                          <td
+                            key={type}
+                            className="px-4 py-3 text-center"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={item.propertyTypes.includes(
+                                type,
+                              )}
+                              onChange={() =>
+                                handleToggleCell(idx, type)
+                              }
+                              className="w-4 h-4 text-red-600 rounded border-gray-300 focus:ring-red-500 cursor-pointer"
+                            />
+                          </td>
+                        ))}
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            {item.selectedPhotos.length}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button
+                              onClick={() =>
+                                handleEditItem(idx)
+                              }
+                              className="text-blue-600 hover:underline text-xs"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() =>
+                                setVendorItems((prev) =>
+                                  prev.filter(
+                                    (_, i) => i !== idx,
+                                  ),
+                                )
+                              }
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {vendorItems.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={11}
+                          className="px-4 py-8 text-center text-gray-500 italic"
+                        >
+                          No items configured for this vendor.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </section>
           </div>
 
-          {/* Footer */}
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4 flex justify-end gap-3 rounded-b-lg">
             <button
               onClick={onClose}
               className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
-              Cancel
+              Close
             </button>
             <button
               onClick={handleSave}
               className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21]"
             >
-              Save Vendor
+              Save & Update Vendor
             </button>
           </div>
         </div>
@@ -1058,20 +805,21 @@ export default function VendorFormModalUpdated({
       {/* Add/Edit Item Modal Overlay */}
       {showAddItem && (
         <div className="fixed inset-0 bg-black bg-opacity-60 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-lg w-full max-w-lg shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <h3 className="font-bold text-lg mb-6 border-b pb-2">
+          <div className="bg-white p-6 rounded-lg w-full max-w-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-lg mb-6 border-b pb-2 text-gray-900">
               {editingItemIndex !== null
-                ? "Edit Item"
+                ? "Edit Item Config"
                 : "Add Item to Vendor"}
             </h3>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Item Selection */}
               <div>
-                <label className="block text-sm font-medium mb-1">
+                <label className="block text-sm font-medium mb-1 text-gray-700">
                   Select Item
                 </label>
                 <select
-                  className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-[#ec2224] outline-none"
+                  className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#ec2224] outline-none bg-white"
                   value={newItem.itemCode}
                   onChange={(e) =>
                     handleItemSelect(e.target.value)
@@ -1094,14 +842,15 @@ export default function VendorFormModalUpdated({
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Quantities */}
+              <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    Min Quantity
+                  <label className="block text-sm font-medium mb-1 text-gray-700">
+                    Min Quantity (MOQ)
                   </label>
                   <input
                     type="number"
-                    className="w-full border rounded p-2"
+                    className="w-full border border-gray-300 rounded p-2"
                     value={newItem.minQuantity}
                     onChange={(e) =>
                       setNewItem({
@@ -1113,12 +862,12 @@ export default function VendorFormModalUpdated({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">
+                  <label className="block text-sm font-medium mb-1 text-gray-700">
                     Multiple Of
                   </label>
                   <input
                     type="number"
-                    className="w-full border rounded p-2"
+                    className="w-full border border-gray-300 rounded p-2"
                     value={newItem.multipleOf}
                     onChange={(e) =>
                       setNewItem({
@@ -1128,17 +877,23 @@ export default function VendorFormModalUpdated({
                       })
                     }
                   />
+                  <p className="text-xs text-gray-400 mt-1">
+                    e.g. Box of 12, enter 12
+                  </p>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Pricing Model
+              {/* Pricing & Agreement */}
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <label className="block text-sm font-medium mb-3 text-gray-700">
+                  Pricing Configuration
                 </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer border p-2 rounded w-full hover:bg-gray-50">
+
+                <div className="flex gap-6 mb-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
+                      name="priceType"
                       checked={newItem.priceType === "Fixed"}
                       onChange={() =>
                         setNewItem({
@@ -1146,13 +901,14 @@ export default function VendorFormModalUpdated({
                           priceType: "Fixed",
                         })
                       }
-                      className="text-[#ec2224]"
+                      className="text-red-600 focus:ring-red-500"
                     />
                     <span className="text-sm">Fixed Price</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer border p-2 rounded w-full hover:bg-gray-50">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="radio"
+                      name="priceType"
                       checked={
                         newItem.priceType === "Not Fixed"
                       }
@@ -1160,41 +916,26 @@ export default function VendorFormModalUpdated({
                         setNewItem({
                           ...newItem,
                           priceType: "Not Fixed",
-                          unitPrice: 0,
                         })
                       }
-                      className="text-[#ec2224]"
+                      className="text-red-600 focus:ring-red-500"
                     />
-                    <span className="text-sm">Not Fixed</span>
+                    <span className="text-sm">
+                      Not Fixed / Market Price
+                    </span>
                   </label>
                 </div>
-              </div>
 
-              {newItem.priceType === "Fixed" && (
-                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-top-2">
+                <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Unit Price (IDR)
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full border rounded p-2"
-                      value={newItem.unitPrice}
-                      onChange={(e) =>
-                        setNewItem({
-                          ...newItem,
-                          unitPrice:
-                            parseFloat(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Agreement
+                    <label className="block text-sm font-medium mb-1 text-gray-700">
+                      Agreement{" "}
+                      {newItem.priceType === "Fixed" && (
+                        <span className="text-red-500">*</span>
+                      )}
                     </label>
                     <select
-                      className="w-full border rounded p-2"
+                      className="w-full border border-gray-300 rounded p-2 text-sm"
                       value={newItem.agreementNumber}
                       onChange={(e) =>
                         setNewItem({
@@ -1203,46 +944,115 @@ export default function VendorFormModalUpdated({
                         })
                       }
                     >
-                      <option value="">Select...</option>
-                      {agreements.map((a) => (
-                        <option key={a.id} value={a.number}>
-                          {a.number}
+                      <option value="">Select Agreement</option>
+                      {formData.agreements?.map((agr) => (
+                        <option
+                          key={agr.documentNumber}
+                          value={agr.documentNumber}
+                        >
+                          {agr.documentNumber} ({agr.type})
                         </option>
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-700">
+                      Unit Price{" "}
+                      {newItem.priceType === "Fixed" && (
+                        <span className="text-red-500">*</span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-gray-500 text-sm">
+                        Rp
+                      </span>
+                      <input
+                        type="number"
+                        className="w-full border border-gray-300 rounded p-2 pl-9 disabled:bg-gray-100 disabled:text-gray-400"
+                        value={newItem.unitPrice}
+                        disabled={
+                          newItem.priceType === "Not Fixed"
+                        }
+                        onChange={(e) =>
+                          setNewItem({
+                            ...newItem,
+                            unitPrice:
+                              parseFloat(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-gray-700">
+                      WHT (%)
+                    </label>
+                    <input
+                      type="number"
+                      className="w-full border border-gray-300 rounded p-2"
+                      value={newItem.taxPercentage}
+                      onChange={(e) =>
+                        setNewItem({
+                          ...newItem,
+                          taxPercentage:
+                            parseFloat(e.target.value) || 0,
+                        })
+                      }
+                    />
+                  </div>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  WHT (%)
-                </label>
-                <input
-                  type="number"
-                  className="w-full border rounded p-2"
-                  value={newItem.taxPercentage}
-                  onChange={(e) =>
-                    setNewItem({
-                      ...newItem,
-                      taxPercentage:
-                        parseFloat(e.target.value) || 0,
-                    })
-                  }
-                />
               </div>
+
+              {/* Photo Selection */}
+              {newItem.masterPhotos &&
+                newItem.masterPhotos.length > 0 && (
+                  <div className="border-t pt-4">
+                    <label className="block text-sm font-medium mb-2 text-gray-700">
+                      Select Item Photos to Display
+                    </label>
+                    <div className="grid grid-cols-4 gap-3">
+                      {newItem.masterPhotos.map(
+                        (photo, idx) => {
+                          const isSelected =
+                            newItem.selectedPhotos.includes(
+                              photo,
+                            );
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => togglePhoto(photo)}
+                              className={`relative aspect-square border-2 rounded-lg cursor-pointer transition-all ${isSelected ? "border-green-500 ring-2 ring-green-100" : "border-gray-200 hover:border-gray-300"}`}
+                            >
+                              <img
+                                src={photo}
+                                className="w-full h-full object-cover rounded-md"
+                                alt="Master"
+                                onError={handleImageError}
+                              />
+                              {isSelected && (
+                                <div className="absolute top-1 right-1 bg-green-500 text-white rounded-full p-0.5 shadow-sm">
+                                  <CheckCircle className="w-4 h-4" />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  </div>
+                )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-8">
+            <div className="flex justify-end gap-3 mt-8 pt-4 border-t">
               <button
                 onClick={() => setShowAddItem(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddItemToVendor}
-                className="px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21]"
+                className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21]"
               >
                 {editingItemIndex !== null
                   ? "Update Item"
@@ -1252,34 +1062,6 @@ export default function VendorFormModalUpdated({
           </div>
         </div>
       )}
-
-      {/* Duplicate Warning Modal */}
-      {duplicateWarning.isOpen &&
-        duplicateWarning.itemToAdd && (
-          <ConfirmationModal
-            title="Duplicate Item"
-            message={`Item ${duplicateWarning.itemToAdd.itemName} is already in the list. Add it anyway?`}
-            confirmLabel="Yes, Add"
-            onConfirm={() => {
-              // Logic to commit add if confirm logic was separated
-              setVendorItems((prev) => [
-                ...prev,
-                duplicateWarning.itemToAdd!,
-              ]);
-              setDuplicateWarning({
-                isOpen: false,
-                itemToAdd: null,
-              });
-              setShowAddItem(false);
-            }}
-            onCancel={() =>
-              setDuplicateWarning({
-                isOpen: false,
-                itemToAdd: null,
-              })
-            }
-          />
-        )}
     </>
   );
 }

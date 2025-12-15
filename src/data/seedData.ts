@@ -1,6 +1,6 @@
 // src/data/seedData.ts
 import type { ProcurementRequest } from "./mockData";
-import { comprehensiveSampleRequests } from "./mockData-comprehensive"; // Assuming this file exists from previous context
+import { comprehensiveSampleRequests } from "./mockData-comprehensive";
 
 export const initialVendors = [
   {
@@ -11,7 +11,8 @@ export const initialVendors = [
     vendorEmail: "contact@furnindo.com",
     vendorPhone: "+62 21 1234 5678",
     contact_person: "Budi Santoso",
-    vendorAgreementLink: "#",
+    vendorAgreementLink: "https://drive.google.com/agreement",
+    vendorType: "Corporation",
     ppnPercentage: 11,
     serviceChargePercentage: 0,
     pb1Percentage: 0,
@@ -20,11 +21,34 @@ export const initialVendors = [
       "Payment Terms - NET 30",
       "Bank Transfer",
     ],
+    // Requirement 2: Mock Legal Data
+    nibNumber: "9120101822192",
+    nibFileLink:
+      "https://storage.supabase.co/legal/nib-vnd001.pdf",
+    npwpNumber: "82.112.334.5-678.000",
+    npwpFileLink:
+      "https://storage.supabase.co/legal/npwp-vnd001.pdf",
+    sppkpNumber: "S-123/PKP/2023",
+    sppkpFileLink:
+      "https://storage.supabase.co/legal/sppkp-vnd001.pdf",
+    deedNumber: "Akta No. 50 (2010)",
+    deedFileLink:
+      "https://storage.supabase.co/legal/deed-vnd001.pdf",
+    sbuNumber: "0-3171-06-003-1-09-002345",
+    sbuFileLink:
+      "https://storage.supabase.co/legal/sbu-vnd001.pdf",
+
+    bankName: "BCA",
+    bankAccountName: "PT Furnindo Makmur",
+    bankAccountNumber: "1234567890",
+    bankAccountDocLink:
+      "https://storage.supabase.co/legal/bank-vnd001.pdf",
+
     agreements: [
       {
         id: "agr-001",
         type: "Agreement" as const,
-        number: "AGR-2025-001",
+        documentNumber: "AGR-2025-001",
         startDate: "2025-01-01",
         endDate: "2025-12-31",
         documentLink: "https://drive.google.com/agreement-001",
@@ -40,6 +64,7 @@ export const initialVendors = [
         unitPrice: 50000,
         agreementNumber: "AGR-2025-001",
         taxPercentage: 11,
+        propertyTypes: ["Franchise", "Leasing"],
       },
       {
         itemCode: "ITM004",
@@ -50,6 +75,7 @@ export const initialVendors = [
         unitPrice: 10000,
         agreementNumber: "AGR-2025-001",
         taxPercentage: 11,
+        propertyTypes: ["Management"],
       },
     ],
     isActive: true,
@@ -113,14 +139,14 @@ export const initialRequests: ProcurementRequest[] = [
     prDate: "2024-11-20",
     propertyName: "RedDoorz Plus Jakarta",
     propertyCode: "JKT-KMG-001",
-    propertyType: "Hotel",
+    propertyType: "Leasing",
     brandName: "Reddoorz Premium",
     propertyAddress: "Jl. Kemang Raya No. 12, Jakarta Selatan",
     picName: "John Doe",
     picNumber: "+62 812 3456 7890",
     requestorName: "Jane Smith",
     requestorEmail: "jane.smith@reddoorz.com",
-    status: "Review by Procurement", // DB status format
+    status: "Review by Procurement",
     activityLog: [],
     items: [
       {

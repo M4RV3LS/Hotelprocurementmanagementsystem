@@ -1,13 +1,13 @@
 import { useState } from "react";
 import ItemConfiguration from "./configuration/ItemConfiguration";
 import VendorManagement from "./configuration/VendorManagement";
-import PaymentMethodConfiguration from "./configuration/PaymentMethodConfiguration";
 import ItemCategoryConfiguration from "./configuration/ItemCategoryConfiguration";
 import { useConfigData } from "../hooks/useConfigData";
 
 export default function Configuration() {
+  // Requirement 3: Removed "payment" from type and array
   const [activeSubTab, setActiveSubTab] = useState<
-    "items" | "vendors" | "payment" | "categories"
+    "items" | "vendors" | "categories"
   >("items");
   const configData = useConfigData();
 
@@ -32,7 +32,7 @@ export default function Configuration() {
           { id: "categories", label: "Item Category" },
           { id: "items", label: "Item Configuration" },
           { id: "vendors", label: "Vendor Management" },
-          { id: "payment", label: "Payment Methods" },
+          // Removed Payment Method Configuration tab
         ].map((tab) => (
           <button
             key={tab.id}
@@ -65,12 +65,6 @@ export default function Configuration() {
           items={configData.items}
           onSaveVendor={configData.saveVendor}
           onDeleteVendor={configData.deleteVendor}
-        />
-      )}
-      {activeSubTab === "payment" && (
-        <PaymentMethodConfiguration
-          paymentMethods={configData.paymentMethods}
-          onSavePaymentMethods={configData.savePaymentMethods}
         />
       )}
     </div>
