@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Edit2 } from "lucide-react";
+import { Plus, Edit2, Download, Upload } from "lucide-react"; // Added icons
 import ItemFormModal from "./ItemFormModal";
 import ConfirmationModal from "./ConfirmationModal";
 import Toast from "../Toast";
@@ -11,8 +11,9 @@ export type Item = {
   brandName: string;
   itemCategory: string;
   uom: string;
-
   isActive: boolean;
+  // Optional fields for completeness based on previous context
+  weightage?: number;
 };
 
 interface ItemConfigurationProps {
@@ -140,12 +141,28 @@ export default function ItemConfiguration({
     }
   };
 
+  // --- Design Only Handlers ---
+  const handleDownloadTemplate = () => {
+    alert(
+      "Design Only: Download template logic will be implemented here.",
+    );
+  };
+
+  const handleBulkUpload = () => {
+    alert(
+      "Design Only: Bulk upload logic will be implemented here.",
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-gray-900">Item Configuration</h2>
-        <div className="flex items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <h2 className="text-gray-900 text-lg font-medium">
+          Item Configuration
+        </h2>
+
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
           {/* Filter Dropdown */}
           <select
             value={filterStatus}
@@ -154,19 +171,44 @@ export default function ItemConfiguration({
                 e.target.value as "all" | "active" | "inactive",
               )
             }
-            className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+            className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#ec2224] text-sm"
           >
             <option value="all">All</option>
             <option value="active">Active Only</option>
             <option value="inactive">Inactive Only</option>
           </select>
 
+          {/* DESIGN REQ 1: Download Template Button */}
+          <button
+            onClick={handleDownloadTemplate}
+            className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
+            title="Download Bulk Update Template"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden xl:inline">Template</span>
+          </button>
+
+          {/* DESIGN REQ 2: Bulk Upload Button */}
+          <button
+            onClick={handleBulkUpload}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
+            title="Bulk Upload Weightage"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="hidden xl:inline">
+              Bulk Upload
+            </span>
+          </button>
+
+          <div className="w-px h-8 bg-gray-300 mx-1 hidden sm:block"></div>
+
+          {/* Add New Item Button */}
           <button
             onClick={handleAddItem}
-            className="px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors flex items-center gap-2"
+            className="px-4 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
           >
-            <Plus className="w-5 h-5" />
-            Add New Item
+            <Plus className="w-4 h-4" />
+            Add Item
           </button>
         </div>
       </div>
@@ -177,26 +219,28 @@ export default function ItemConfiguration({
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Item Code
                 </th>
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Item Name
                 </th>
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Brand Name
                 </th>
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Category
                 </th>
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   UoM
                 </th>
-
-                <th className="px-6 py-3 text-left text-gray-700">
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
+                  Weightage
+                </th>
+                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Status
                 </th>
-                <th className="px-6 py-3 text-right text-gray-700">
+                <th className="px-6 py-3 text-right text-gray-700 text-sm font-semibold">
                   Actions
                 </th>
               </tr>
@@ -221,7 +265,7 @@ export default function ItemConfiguration({
                         : "bg-gray-50 opacity-75"
                     }`}
                   >
-                    <td className="px-6 py-4 text-gray-900">
+                    <td className="px-6 py-4 text-gray-900 font-mono text-sm">
                       {item.itemCode}
                     </td>
                     <td className="px-6 py-4 text-gray-900">
@@ -236,14 +280,17 @@ export default function ItemConfiguration({
                     <td className="px-6 py-4 text-gray-700">
                       {item.uom}
                     </td>
+                    <td className="px-6 py-4 text-gray-900">
+                      {item.weightage ?? "-"}
+                    </td>
 
                     <td className="px-6 py-4">
                       {item.isActive ? (
-                        <span className="inline-flex px-3 py-1 rounded-full text-sm bg-green-100 text-green-700">
+                        <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex px-3 py-1 rounded-full text-sm bg-gray-200 text-gray-700">
+                        <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
                           Inactive
                         </span>
                       )}
@@ -264,11 +311,6 @@ export default function ItemConfiguration({
                               handleToggleActive(item)
                             }
                           />
-                          <span className="text-sm text-gray-600">
-                            {item.isActive
-                              ? "Active"
-                              : "Inactive"}
-                          </span>
                         </div>
                       </div>
                     </td>
