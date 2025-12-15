@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 
+// ... (Rest of interfaces kept same for brevity, showing modification below)
+
 // --- Interfaces ---
 
 interface Agreement {
@@ -36,14 +38,12 @@ interface VendorItem {
   masterPhotos?: string[];
 }
 
-// Extended Vendor interface
 interface ExtendedVendor
   extends Omit<Vendor, "agreements" | "items"> {
   agreements: Agreement[];
   items: VendorItem[];
   deliveryFee?: number;
-
-  // Requirement 1: Complete Legal & Admin Fields
+  // ... Legal fields same as before
   nibNumber?: string;
   nibFileLink?: string;
   ktpNumber?: string;
@@ -65,13 +65,11 @@ interface ExtendedVendor
   gptcNumber?: string;
   gptcFileLink?: string;
   otherLicenseFileLink?: string;
-
   bankName?: string;
   bankAccountName?: string;
   bankAccountNumber?: string;
   bankAccountDocLink?: string;
   legalDocLink?: string;
-
   picName?: string;
   email2?: string;
 }
@@ -403,7 +401,7 @@ export default function VendorFormModalUpdated({
               </div>
             </section>
 
-            {/* 2. Legal & Admin Information (Requirement 1: Added all requested fields) */}
+            {/* 2. Legal & Admin Information */}
             <section>
               <h3 className="text-gray-900 font-bold mb-4 border-b pb-2 flex items-center gap-2">
                 <span className="bg-gray-200 text-gray-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">
@@ -983,9 +981,10 @@ export default function VendorFormModalUpdated({
                       />
                     </div>
                   </div>
+                  {/* Requirement #8: Changed Tax Label to WHT% */}
                   <div>
                     <label className="block text-sm font-medium mb-1 text-gray-700">
-                      WHT (%)
+                      WHT%
                     </label>
                     <input
                       type="number"

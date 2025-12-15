@@ -878,7 +878,9 @@ export const itemsAPI = {
       .from("master_items")
       .select(`*, category:item_categories(name)`)
       .order("name");
+
     if (error) return [];
+
     return (data || []).map((i: any) => ({
       itemCode: i.code,
       itemName: i.name,
@@ -892,8 +894,16 @@ export const itemsAPI = {
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
+      // Req 2, 3, 4: Map new fields
+      itemType: i.item_type || "Product",
+      weightage: i.weightage,
+      length: i.length,
+      width: i.width,
+      height: i.height,
+      weight: i.weight,
     }));
   },
+
   save: async (item: any) => {
     const { data, error } = await supabase
       .from("master_items")
@@ -910,14 +920,23 @@ export const itemsAPI = {
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
+          // Req 2, 3, 4: Save new fields
+          item_type: item.itemType,
+          weightage: item.weightage,
+          length: item.length,
+          width: item.width,
+          height: item.height,
+          weight: item.weight,
         },
         { onConflict: "code" },
       )
       .select()
       .single();
+
     if (error) throw error;
     return { ...item };
   },
+
   delete: async (code: string) => {
     const { error } = await supabase
       .from("master_items")
@@ -925,6 +944,7 @@ export const itemsAPI = {
       .eq("code", code);
     if (error) throw error;
   },
+
   unassignCategory: async (itemCodes: string[]) => {
     const { error } = await supabase
       .from("master_items")
@@ -932,6 +952,7 @@ export const itemsAPI = {
       .in("code", itemCodes);
     if (error) throw error;
   },
+
   assignCategory: async (
     itemCodes: string[],
     categoryId: string,
@@ -952,31 +973,38 @@ export const itemCategoriesAPI = {
   getAll: async () => {
     const { data, error } = await supabase
       .from("item_categories")
-      .select(`*, items:master_items(count)`);
+      .select(`*, items:master_items(count)`); // Count items to handle Deactivate logic
+
     if (error) throw error;
+
     return data.map((cat: any) => ({
       ...cat,
+      // Map isActive status
+      isActive: cat.is_active ?? true,
       itemCount: cat.items?.[0]?.count || 0,
     }));
   },
+
   save: async (name: string) => {
     const { data, error } = await supabase
       .from("item_categories")
-      .upsert({ name }, { onConflict: "name" })
+      .upsert({ name, is_active: true }, { onConflict: "name" })
       .select()
       .single();
     if (error) throw error;
     return data;
   },
-  delete: async (id: string) => {
-    await supabase
-      .from("master_items")
-      .update({ category_id: null })
-      .eq("category_id", id);
+
+  // Req 1: Removed Delete capability (commented out or replaced with toggle logic)
+  // delete: async (id: string) => { ... }
+
+  // Req 1: New Toggle Status API
+  toggleStatus: async (id: string, isActive: boolean) => {
     const { error } = await supabase
       .from("item_categories")
-      .delete()
+      .update({ is_active: isActive })
       .eq("id", id);
+
     if (error) throw error;
   },
 };

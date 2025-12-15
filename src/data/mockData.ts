@@ -18,6 +18,7 @@ export interface DeliveryProof {
 export interface ItemCategory {
   id: string;
   name: string;
+  isActive: boolean; // Req 1: Added status
   itemCount?: number;
 }
 
@@ -80,57 +81,17 @@ export type PaymentTerms =
   | "Payment Terms"
   | string;
 
-export const INDONESIA_REGIONS = [
-  "Nanggroe Aceh Darussalam",
-  "Sumatera Utara",
-  "Sumatera Selatan",
-  "Sumatera Barat",
-  "Bengkulu",
-  "Riau",
-  "Kepulauan Riau",
-  "Jambi",
-  "Lampung",
-  "Bangka Belitung",
-  "Kalimantan Barat",
-  "Kalimantan Timur",
-  "Kalimantan Selatan",
-  "Kalimantan Tengah",
-  "Kalimantan Utara",
-  "Banten",
-  "DKI Jakarta",
-  "Jawa Barat",
-  "Jawa Tengah",
-  "Daerah Istimewa Yogyakarta",
-  "Jawa Timur",
-  "Bali",
-  "Nusa Tenggara Timur",
-  "Nusa Tenggara Barat",
-  "Gorontalo",
-  "Sulawesi Barat",
-  "Sulawesi Tengah",
-  "Sulawesi Utara",
-  "Sulawesi Tenggara",
-  "Sulawesi Selatan",
-  "Maluku Utara",
-  "Maluku",
-  "Papua Barat",
-  "Papua",
-  "Papua Tengah",
-  "Papua Pegunungan",
-  "Papua Selatan",
-  "Papua Barat Daya",
-];
+export type ItemType = "Product" | "Service"; // Req 3
 
 export interface ProcurementItem {
   id: string;
   prNumber: string;
   itemCode: string;
   itemName: string;
-  itemCategory: string; // Display Name
-  categoryId?: string; // Link ID
+  itemCategory: string;
+  categoryId?: string;
   description?: string;
   photos?: string[];
-  // New Fields for Commodities
   commodityCode?: string;
   commodityName?: string;
   selectedProperties: Record<string, string>;
@@ -162,6 +123,27 @@ export interface ProcurementItem {
   propertyAddress?: string;
   brandName?: string;
   picName?: string;
+}
+
+export interface Item {
+  itemCode: string;
+  itemName: string;
+  brandName: string;
+  itemCategory: string;
+  categoryId?: string;
+  uom: string;
+  isActive: boolean;
+  description?: string;
+  photos?: string[];
+  commodityCode?: string;
+  commodityName?: string;
+  // Req 2, 3, 4: New Fields
+  itemType: ItemType;
+  weightage?: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  weight?: number;
 }
 
 export interface ProcurementRequest {

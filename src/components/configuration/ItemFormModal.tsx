@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Image as ImageIcon } from "lucide-react";
 import { itemCategoriesAPI } from "../../utils/api";
-import type { Item } from "../../data/mockData";
+import type { Item, ItemType } from "../../data/mockData";
 import {
   BRAND_NAMES,
   COMMODITIES_LIST,
@@ -20,7 +20,7 @@ export default function ItemFormModal({
 }: ItemFormModalProps) {
   const [formData, setFormData] = useState<any>(
     item || {
-      itemCode: "",
+      itemCode: "", // Auto-generated
       itemName: "",
       brandName: "",
       itemCategory: "",
@@ -31,6 +31,13 @@ export default function ItemFormModal({
       isActive: true,
       commodityCode: "",
       commodityName: "",
+      // New Fields Defaults
+      itemType: "Product" as ItemType,
+      weightage: 0,
+      length: 0,
+      width: 0,
+      height: 0,
+      weight: 0,
     },
   );
 
@@ -38,13 +45,25 @@ export default function ItemFormModal({
 
   useEffect(() => {
     itemCategoriesAPI.getAll().then(setCategories);
-  }, []);
+
+    // Auto-generate code if new
+    if (!item) {
+      const timestamp = Date.now().toString().slice(-6);
+      const random = Math.floor(Math.random() * 1000)
+        .toString()
+        .padStart(3, "0");
+      const autoCode = `ITM-${timestamp}${random}`;
+      setFormData((prev: any) => ({
+        ...prev,
+        itemCode: autoCode,
+      }));
+    }
+  }, [item]);
 
   const handlePhotoUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     if (e.target.files && e.target.files[0]) {
-      // Mock URL for display - in prod upload to storage first
       const url = URL.createObjectURL(e.target.files[0]);
       setFormData((prev: any) => ({
         ...prev,
@@ -95,24 +114,63 @@ export default function ItemFormModal({
             onSubmit={handleSubmit}
             className="p-6 space-y-6"
           >
+            {/* Req 3: Item Type Selection */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <label className="block text-gray-700 font-medium mb-3">
+                Item Type{" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <div className="flex gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="itemType"
+                    value="Product"
+                    checked={formData.itemType === "Product"}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "itemType",
+                        e.target.value,
+                      )
+                    }
+                    className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224]"
+                  />
+                  <span className="text-gray-900">
+                    Physical Product
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="itemType"
+                    value="Service"
+                    checked={formData.itemType === "Service"}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "itemType",
+                        e.target.value,
+                      )
+                    }
+                    className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224]"
+                  />
+                  <span className="text-gray-900">Service</span>
+                </label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-gray-700 mb-2">
                   Item Code{" "}
-                  <span className="text-red-500">*</span>
+                  <span className="text-gray-400 text-xs">
+                    (Auto-generated)
+                  </span>
                 </label>
                 <input
                   type="text"
-                  required
                   value={formData.itemCode}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "itemCode",
-                      e.target.value,
-                    )
-                  }
-                  disabled={!!item}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
+                  disabled
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
                 />
               </div>
 
@@ -135,7 +193,26 @@ export default function ItemFormModal({
                 />
               </div>
 
-              {/* Requirement 6: Brand Dropdown */}
+              {/* Req 2: Weightage Field */}
+              <div>
+                <label className="block text-gray-700 mb-2">
+                  Weightage
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.weightage || ""}
+                  onChange={(e) =>
+                    handleInputChange(
+                      "weightage",
+                      parseFloat(e.target.value),
+                    )
+                  }
+                  placeholder="e.g. 1.0"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                />
+              </div>
+
               <div>
                 <label className="block text-gray-700 mb-2">
                   Brand Name
@@ -159,33 +236,35 @@ export default function ItemFormModal({
                 </select>
               </div>
 
-              {/* Requirement 3: Commodities Dropdown */}
-              <div>
-                <label className="block text-gray-700 mb-2">
-                  Commodities Name
-                </label>
-                <select
-                  value={formData.commodityCode}
-                  onChange={(e) => {
-                    const selected = COMMODITIES_LIST.find(
-                      (c) => c.code === e.target.value,
-                    );
-                    setFormData({
-                      ...formData,
-                      commodityCode: selected?.code || "",
-                      commodityName: selected?.name || "",
-                    });
-                  }}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                >
-                  <option value="">Select Commodity</option>
-                  {COMMODITIES_LIST.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.code} - {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {/* CHANGE MADE HERE: Wrapped Commodities in conditional check */}
+              {formData.itemType === "Product" && (
+                <div>
+                  <label className="block text-gray-700 mb-2">
+                    Commodities Name
+                  </label>
+                  <select
+                    value={formData.commodityCode}
+                    onChange={(e) => {
+                      const selected = COMMODITIES_LIST.find(
+                        (c) => c.code === e.target.value,
+                      );
+                      setFormData({
+                        ...formData,
+                        commodityCode: selected?.code || "",
+                        commodityName: selected?.name || "",
+                      });
+                    }}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                  >
+                    <option value="">Select Commodity</option>
+                    {COMMODITIES_LIST.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} - {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-gray-700 mb-2">
@@ -231,6 +310,85 @@ export default function ItemFormModal({
                 />
               </div>
             </div>
+
+            {/* Req 4: Dimensions & Weight (Only for Physical Products) */}
+            {formData.itemType === "Product" && (
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <h4 className="font-medium text-gray-900 mb-3 text-sm">
+                  Physical Specifications
+                </h4>
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Length (cm)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.length}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "length",
+                          parseFloat(e.target.value),
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Width (cm)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.width}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "width",
+                          parseFloat(e.target.value),
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Height (cm)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.height}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "height",
+                          parseFloat(e.target.value),
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Weight (kg)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.weight}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "weight",
+                          parseFloat(e.target.value),
+                        )
+                      }
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-gray-700 mb-2">

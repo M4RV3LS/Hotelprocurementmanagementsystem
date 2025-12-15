@@ -5,7 +5,6 @@ import ItemCategoryConfiguration from "./configuration/ItemCategoryConfiguration
 import { useConfigData } from "../hooks/useConfigData";
 
 export default function Configuration() {
-  // Requirement 3: Removed "payment" from type and array
   const [activeSubTab, setActiveSubTab] = useState<
     "items" | "vendors" | "categories"
   >("items");
@@ -29,10 +28,14 @@ export default function Configuration() {
       {/* Sub-Navigation */}
       <div className="bg-white border border-gray-200 rounded-lg p-1 inline-flex gap-1 overflow-x-auto">
         {[
-          { id: "categories", label: "Item Category" },
+          // Requirement #3: Renaming Item Category
+          {
+            id: "categories",
+            label: "Item Category Configuration",
+          },
           { id: "items", label: "Item Configuration" },
-          { id: "vendors", label: "Vendor Management" },
-          // Removed Payment Method Configuration tab
+          // Requirement #2: Renaming Vendor Management
+          { id: "vendors", label: "Vendor Item Configuration" },
         ].map((tab) => (
           <button
             key={tab.id}
