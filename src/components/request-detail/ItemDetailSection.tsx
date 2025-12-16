@@ -9,7 +9,7 @@ import type {
 interface ItemDetailSectionProps {
   item: ProcurementItem;
   requestStatus: string;
-  requestPropertyType: PropertyType; // NEW PROP
+  requestPropertyType: PropertyType;
   vendors: any[];
   onUpdate: (updatedItem: Partial<ProcurementItem>) => void;
 }
@@ -17,7 +17,7 @@ interface ItemDetailSectionProps {
 export default function ItemDetailSection({
   item,
   requestStatus,
-  requestPropertyType, // Receive the prop
+  requestPropertyType,
   vendors,
   onUpdate,
 }: ItemDetailSectionProps) {
@@ -33,33 +33,26 @@ export default function ItemDetailSection({
   );
   const [isEditingPrice, setIsEditingPrice] = useState(false);
 
-  // Get payment methods for selected vendor
   const selectedVendorData = vendors.find(
     (v) => v.vendorName === selectedVendor,
   );
   const availablePaymentMethods =
     selectedVendorData?.paymentMethods || [];
 
-  // FILTER VENDORS Logic
   const filteredVendors = useMemo(() => {
     return vendors.filter((vendor) => {
       const isActive = vendor.isActive;
 
-      // Handle Region Match (Header Level)
       const hasRegion = Array.isArray(vendor.vendorRegion)
         ? vendor.vendorRegion.includes(item.region)
         : vendor.vendorRegion === item.region;
 
-      // Handle Item Match & Property Type Match (Item Level)
       const validVendorItem = vendor.items?.find(
         (vi: any) => vi.itemCode === item.itemCode,
       );
 
-      // 1. Vendor must sell this item
       const hasItem = !!validVendorItem;
 
-      // 2. Vendor's item must support the Request's Property Type
-      // We use the passed prop 'requestPropertyType' instead of item.propertyType
       const hasPropertyTypeMatch = validVendorItem
         ? validVendorItem.propertyTypes?.includes(
             requestPropertyType,
@@ -75,7 +68,7 @@ export default function ItemDetailSection({
     item.itemCode,
     requestPropertyType,
     vendors,
-  ]); // Updated dependency
+  ]);
 
   const getItemStatusBadge = (itemStatus: string) => {
     const colors = {
@@ -172,7 +165,6 @@ export default function ItemDetailSection({
 
   return (
     <div className="space-y-6">
-      {/* Item Details */}
       <div>
         <h4 className="text-gray-900 mb-3 border-b border-gray-300 pb-2">
           ITEM DETAILS
@@ -230,7 +222,7 @@ export default function ItemDetailSection({
               Quantity:
             </span>
             <span className="text-gray-900">
-              {item.quantity} {item.uom}
+              {item.quantity}
             </span>
           </div>
 
@@ -250,7 +242,6 @@ export default function ItemDetailSection({
         </div>
       </div>
 
-      {/* Vendor Information */}
       <div>
         <div className="flex items-center justify-between mb-3 border-b border-gray-300 pb-2">
           <h4 className="text-gray-900">VENDOR INFORMATION</h4>
@@ -411,7 +402,6 @@ export default function ItemDetailSection({
         )}
       </div>
 
-      {/* Pricing Information */}
       <div>
         <h4 className="text-gray-900 mb-3 border-b border-gray-300 pb-2">
           PRICING INFORMATION

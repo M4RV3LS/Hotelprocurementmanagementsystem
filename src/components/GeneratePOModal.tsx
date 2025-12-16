@@ -4,40 +4,46 @@ import {
   type ProcurementRequest,
   type ProcurementItem,
 } from "../data/mockData";
+import MultiSelectDropdown from "./configuration/MultiSelectDropdown";
 
 interface GeneratePOModalProps {
   onClose: () => void;
   onGenerate: (poRequests: ProcurementRequest[]) => void;
-  vendors: any[]; // Add this
-  requests: ProcurementRequest[]; // Add this
+  vendors: any[];
+  requests: ProcurementRequest[];
 }
 
 interface POData {
   poNumber: string;
   poDate: string;
-  deliveryCompany: string;
-  deliveryAddress: string;
-  deliveryPIC: string;
+  eta: string;
+  paymentTerms: string;
   vendorName: string;
   vendorAddress: string;
   vendorPIC: string;
+  ppnPercentage: number;
+  serviceChargePercentage: number;
   items: Array<{
     prNumber: string;
-    brand: string;
     itemName: string;
+    brandItem: string;
+    brandProperty: string;
     quantity: number;
-    uom: string;
+    unitPrice: number;
+    whtPercentage: number;
     pic: string;
+    region: string;
     propertyCode: string;
     propertyName: string;
     propertyAddress: string;
-    itemStatus: "Not Set" | "Ready" | "Cancelled";
+    item: ProcurementItem;
+    status: "Ready" | "Not Ready";
   }>;
 }
 
 type StepType = "selection" | "preview";
 
-export default function GeneratePOModal({
+export default function GeneratePOModalUpdated({
   onClose,
   onGenerate,
   vendors,
@@ -45,40 +51,37 @@ export default function GeneratePOModal({
 }: GeneratePOModalProps) {
   const [step, setStep] = useState<StepType>("selection");
 
-  // Selection state
   const [selectedVendor, setSelectedVendor] = useState("");
-  const [selectedIsland, setSelectedIsland] = useState("");
+  const [selectedPropertyType, setSelectedPropertyType] =
+    useState("");
+  const [selectedRegions, setSelectedRegions] = useState<
+    string[]
+  >([]);
   const [selectedPaymentTerms, setSelectedPaymentTerms] =
     useState("");
 
-  // Preview state
   const [poData, setPOData] = useState<POData | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
 
-  // Get items ready for PO (Waiting PO status + has vendor + has pricing)
   const getAvailableItems = () => {
     const items: Array<{
       request: ProcurementRequest;
       item: ProcurementItem;
     }> = [];
-    requests.forEach((request) => {
-      if (request.status === "Waiting PO") {
-        request.items.forEach((item) => {
-          if (
-            item.vendorName &&
-            item.unitPrice &&
-            item.unitPrice > 0
-          ) {
-            items.push({ request, item });
-          }
-        });
-      }
-    });
 
+    requests.forEach((request) => {
+      request.items.forEach((item) => {
+        if (
+          item.status === "Waiting PO" &&
+          item.vendorName &&
+          (item.unitPrice || 0) > 0
+        ) {
+          items.push({ request, item });
+        }
+      });
+    });
     return items;
   };
 
-  // Get unique vendors from available items
   const getAvailableVendors = () => {
     const availableItems = getAvailableItems();
     const uniqueVendors = new Set(
@@ -89,53 +92,46 @@ export default function GeneratePOModal({
     ) as string[];
   };
 
-  // Get islands for selected vendor
-  const getAvailableIslands = () => {
+  const getAvailablePropertyTypes = () => {
     if (!selectedVendor) return [];
-
     const availableItems = getAvailableItems();
-    const filteredItems = availableItems.filter(
+    const vendorItems = availableItems.filter(
       ({ item }) => item.vendorName === selectedVendor,
     );
-
-    // Get islands from property addresses (simplified - you'd have actual island data)
-    const islands = new Set<string>();
-    filteredItems.forEach(({ request }) => {
-      // Mock logic: extract island from address or use a mapping
-      if (
-        request.propertyAddress.includes("Jakarta") ||
-        request.propertyAddress.includes("Bandung")
-      ) {
-        islands.add("Java");
-      } else if (request.propertyAddress.includes("Bali")) {
-        islands.add("Bali");
-      } else {
-        islands.add("Other");
-      }
-    });
-
-    return Array.from(islands);
+    const types = new Set(
+      vendorItems.map(({ request }) => request.propertyType),
+    );
+    return Array.from(types).filter(Boolean) as string[];
   };
 
-  // Get payment terms for selected vendor + island
+  const getAvailableRegions = () => {
+    if (!selectedVendor || !selectedPropertyType) return [];
+    const availableItems = getAvailableItems();
+    const filteredItems = availableItems.filter(
+      ({ item, request }) =>
+        item.vendorName === selectedVendor &&
+        request.propertyType === selectedPropertyType,
+    );
+    const regions = new Set(
+      filteredItems.map(({ item }) => item.region),
+    );
+    return Array.from(regions).filter(Boolean) as string[];
+  };
+
   const getAvailablePaymentTerms = () => {
-    if (!selectedVendor || !selectedIsland) return [];
+    if (
+      !selectedVendor ||
+      !selectedPropertyType ||
+      selectedRegions.length === 0
+    )
+      return [];
 
     const availableItems = getAvailableItems();
     const filteredItems = availableItems.filter(
-      ({ request, item }) => {
-        const island =
-          request.propertyAddress.includes("Jakarta") ||
-          request.propertyAddress.includes("Bandung")
-            ? "Java"
-            : request.propertyAddress.includes("Bali")
-              ? "Bali"
-              : "Other";
-        return (
-          item.vendorName === selectedVendor &&
-          island === selectedIsland
-        );
-      },
+      ({ item, request }) =>
+        item.vendorName === selectedVendor &&
+        request.propertyType === selectedPropertyType &&
+        selectedRegions.includes(item.region),
     );
 
     const paymentTerms = new Set(
@@ -144,48 +140,27 @@ export default function GeneratePOModal({
     return Array.from(paymentTerms).filter(Boolean) as string[];
   };
 
-  // Count items matching criteria
   const getMatchingItemsCount = (
     vendor?: string,
-    island?: string,
-    paymentTerms?: string,
+    propType?: string,
   ) => {
     const availableItems = getAvailableItems();
-
-    return availableItems.filter(({ request, item }) => {
-      const itemIsland =
-        request.propertyAddress.includes("Jakarta") ||
-        request.propertyAddress.includes("Bandung")
-          ? "Java"
-          : request.propertyAddress.includes("Bali")
-            ? "Bali"
-            : "Other";
-
+    return availableItems.filter(({ item, request }) => {
       if (vendor && item.vendorName !== vendor) return false;
-      if (island && itemIsland !== island) return false;
-      if (paymentTerms && item.paymentTerms !== paymentTerms)
+      if (propType && request.propertyType !== propType)
         return false;
-
       return true;
     }).length;
   };
 
   const handleNext = () => {
-    // Compile matching items
     const availableItems = getAvailableItems();
     const matchingItems = availableItems.filter(
-      ({ request, item }) => {
-        const island =
-          request.propertyAddress.includes("Jakarta") ||
-          request.propertyAddress.includes("Bandung")
-            ? "Java"
-            : request.propertyAddress.includes("Bali")
-              ? "Bali"
-              : "Other";
-
+      ({ item, request }) => {
         return (
           item.vendorName === selectedVendor &&
-          island === selectedIsland &&
+          request.propertyType === selectedPropertyType &&
+          selectedRegions.includes(item.region) &&
           item.paymentTerms === selectedPaymentTerms
         );
       },
@@ -196,41 +171,55 @@ export default function GeneratePOModal({
       return;
     }
 
-    // Generate PO Number
-    const poNumber = `PO2025000${Math.floor(
-      Math.random() * 1000,
+    const poNumber = `PO${new Date().getFullYear()}${Math.floor(
+      Math.random() * 10000,
     )
       .toString()
-      .padStart(3, "0")}VIIDRMI`;
+      .padStart(4, "0")}IDR`;
+
     const poDate = new Date().toISOString().split("T")[0];
 
-    // Get vendor info
     const vendor = vendors.find(
       (v) => v.vendorName === selectedVendor,
     );
 
-    // Compile PO data
+    const getItemWHT = (itemCode: string) => {
+      const vendorItem = vendor?.items?.find(
+        (vi: any) => vi.itemCode === itemCode,
+      );
+      return vendorItem?.taxPercentage || 0;
+    };
+
     const compiledPOData: POData = {
       poNumber,
       poDate,
-      deliveryCompany: "PT REDDOORZ MANAGEMENT INDONESIA",
-      deliveryAddress:
-        "Wisma BNI 46, LT 25, Jl. Jenderal Sudirman No.Kav. 1, RT.1/RW.8, Karet Tengsin, Kecamatan Tanah Abang, Kota Jakarta Pusat, Daerah Khusus Ibukota Jakarta 10220",
-      deliveryPIC: "Arini Prima Setianingsih",
+      eta: "",
+      paymentTerms: selectedPaymentTerms,
       vendorName: selectedVendor,
-      vendorAddress: vendor?.vendorAddress || "",
-      vendorPIC: "Vendor PIC",
+      vendorAddress: vendor?.vendorAddress || "-",
+      vendorPIC:
+        vendor?.picName || vendor?.contact_person || "-",
+      ppnPercentage: vendor?.ppnPercentage || 11,
+      serviceChargePercentage:
+        vendor?.serviceChargePercentage || 0,
       items: matchingItems.map(({ request, item }) => ({
         prNumber: request.prNumber,
-        brand: request.brandName,
-        itemName: `${item.itemName} - ${Object.values(item.selectedProperties).join(", ")}`,
+        itemName: `${item.itemName}`,
+        brandItem:
+          item.itemCategory === "Branding Item"
+            ? request.brandName || "RedDoorz"
+            : "Generic",
+        brandProperty: request.brandName,
         quantity: item.quantity,
-        uom: item.uom,
+        unitPrice: item.unitPrice || 0,
+        whtPercentage: getItemWHT(item.itemCode),
         pic: request.picName,
+        region: item.region,
         propertyCode: request.propertyCode,
         propertyName: request.propertyName,
         propertyAddress: request.propertyAddress,
-        itemStatus: "Not Set",
+        item: item,
+        status: "Ready",
       })),
     };
 
@@ -241,187 +230,231 @@ export default function GeneratePOModal({
   const handleExportPO = () => {
     if (!poData) return;
 
-    // Update all matching requests and items
-    const updatedRequests = procurementRequests.map(
-      (request) => {
-        const matchingPOItems = poData.items.filter(
-          (poItem) => poItem.prNumber === request.prNumber,
+    const readyItems = poData.items.filter(
+      (i) => i.status === "Ready",
+    );
+
+    if (readyItems.length === 0) {
+      alert(
+        "No items are marked as 'Ready'. PO cannot be generated.",
+      );
+      return;
+    }
+
+    if (!poData.eta) {
+      alert("Please input Estimated Time Arrival (ETA).");
+      return;
+    }
+
+    import("../utils/api").then(({ purchaseOrdersAPI }) => {
+      const vendorId = vendors.find(
+        (v) => v.vendorName === selectedVendor,
+      )?.id;
+
+      if (!vendorId) {
+        alert(
+          "System Error: Vendor ID not found. Please refresh vendor data.",
         );
+        return;
+      }
 
-        if (matchingPOItems.length > 0) {
-          // Update specific items with PO info and new status
-          const updatedItems = request.items.map((item) => {
-            const poItem = matchingPOItems.find(
-              (poi) => poi.itemName.includes(item.itemName), // Note: In prod, match by ID is safer
-            );
+      const poPayload = {
+        poNumber: poData.poNumber,
+        vendorId: vendorId,
+        generatedDate: poData.poDate,
+        totalAmount: readyItems.reduce(
+          (sum, i) => sum + i.unitPrice * i.quantity,
+          0,
+        ),
+        items: readyItems.map((i) => ({
+          id: i.item.id,
+          whtPercentage: i.whtPercentage,
+          eta: poData.eta,
+        })),
+      };
 
-            if (poItem) {
-              return {
-                ...item,
-                itemStatus: poItem.itemStatus,
-                poNumber: poData.poNumber,
-                poDate: poData.poDate,
-                status: "On Process by Vendor" as const, // Update ITEM status
-              };
-            }
-            return item;
-          });
-
-          // Check if all items in this request are now "On Process" or further
-          // This logic helps keep the Request Summary status consistent
-          const allItemsProcessed = updatedItems.every(
-            (i) =>
-              i.status === "On Process by Vendor" ||
-              i.status === "Delivered" ||
-              i.itemStatus === "Cancelled",
+      purchaseOrdersAPI
+        .create(poPayload)
+        .then(() => {
+          alert(
+            `PO ${poData.poNumber} generated successfully with ${readyItems.length} items!`,
           );
 
-          return {
-            ...request,
-            // Update request status if all items are processed, otherwise keep as is or update logic as needed
-            status: allItemsProcessed
-              ? "On Process by Vendor"
-              : request.status,
-            // We can still keep PO number on request level if we want a "main" PO,
-            // but now we rely on items for listing.
-            items: updatedItems,
-          };
-        }
+          const readyItemIds = new Set(
+            readyItems.map((i) => i.item.id),
+          );
 
-        return request;
-      },
-    );
+          const updatedRequests = requests.map((req) => ({
+            ...req,
+            items: req.items.map((item) => {
+              if (readyItemIds.has(item.id)) {
+                return {
+                  ...item,
+                  status: "Waiting PO Approval" as const,
+                  poNumber: poData.poNumber,
+                };
+              }
+              return item;
+            }),
+          }));
 
-    // Call onGenerate with updated requests
-    const matchingRequests = updatedRequests.filter((req) =>
-      poData.items.some(
-        (poItem) => poItem.prNumber === req.prNumber,
-      ),
-    );
-
-    onGenerate(matchingRequests);
-    alert(
-      `PO ${poData.poNumber} generated successfully!\n\n${poData.items.length} items included.`,
-    );
-    onClose();
+          onGenerate(updatedRequests);
+          onClose();
+        })
+        .catch((err) => {
+          console.error(err);
+          alert("Failed to create PO in database.");
+        });
+    });
   };
 
-  const availableVendors = getAvailableVendors();
-  const availableIslands = getAvailableIslands();
-  const availablePaymentTerms = getAvailablePaymentTerms();
+  const calculateTotals = () => {
+    if (!poData)
+      return {
+        totalQty: 0,
+        totalAmount: 0,
+        ppn: 0,
+        sc: 0,
+        grandTotal: 0,
+      };
+
+    const readyItems = poData.items.filter(
+      (i) => i.status === "Ready",
+    );
+
+    const totalQty = readyItems.reduce(
+      (sum, item) => sum + item.quantity,
+      0,
+    );
+    const totalAmount = readyItems.reduce(
+      (sum, item) => sum + item.quantity * item.unitPrice,
+      0,
+    );
+
+    const sc =
+      totalAmount * (poData.serviceChargePercentage / 100);
+    const taxableAmount = totalAmount + sc;
+    const ppn = taxableAmount * (poData.ppnPercentage / 100);
+
+    const grandTotal = totalAmount + sc + ppn;
+
+    return { totalQty, totalAmount, ppn, sc, grandTotal };
+  };
+
+  const totals = calculateTotals();
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(val);
 
   return (
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black bg-opacity-50 z-50"
         onClick={onClose}
       />
-
-      {/* Modal */}
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl max-h-[90vh] overflow-y-auto">
-          {/* Header */}
+        <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
             <h2 className="text-gray-900">
               Generate Purchase Order
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-gray-400 hover:text-gray-600"
             >
               <X className="w-6 h-6" />
             </button>
           </div>
 
-          {/* Content */}
           <div className="px-8 py-6">
             {step === "selection" ? (
               <div className="space-y-6">
-                <p className="text-gray-600 mb-6">
-                  Select criteria to compile PO:
-                </p>
-
-                {/* Vendor Selection */}
-                <div>
-                  <label className="block text-gray-900 mb-3">
-                    1. Select Vendor{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={selectedVendor}
-                    onChange={(e) => {
-                      setSelectedVendor(e.target.value);
-                      setSelectedIsland("");
-                      setSelectedPaymentTerms("");
-                    }}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] text-lg"
-                    disabled={availableVendors.length === 0}
-                  >
-                    <option value="">Choose Vendor</option>
-                    {availableVendors.map((vendor) => (
-                      <option key={vendor} value={vendor}>
-                        {vendor} (
-                        {getMatchingItemsCount(vendor)} items
-                        ready)
-                      </option>
-                    ))}
-                  </select>
-                  {availableVendors.length === 0 && (
-                    <p className="text-sm text-amber-600 mt-2">
-                      ⚠️ No vendors with items ready for PO
-                      generation
-                    </p>
-                  )}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-blue-900 text-sm">
+                    <strong>Note:</strong> Items are filtered by
+                    Vendor &gt; Property Type &gt; Region &gt;
+                    Payment Terms.
+                  </p>
                 </div>
-
-                {selectedVendor && (
-                  <div className="flex items-center text-gray-400">
-                    <ChevronRight className="w-6 h-6" />
-                  </div>
-                )}
-
-                {/* Island Selection */}
-                {selectedVendor && (
+                <div className="space-y-4">
                   <div>
-                    <label className="block text-gray-900 mb-3">
-                      2. Select Island{" "}
+                    <label className="block text-gray-700 mb-2">
+                      Vendor{" "}
                       <span className="text-red-500">*</span>
                     </label>
                     <select
-                      value={selectedIsland}
+                      value={selectedVendor}
                       onChange={(e) => {
-                        setSelectedIsland(e.target.value);
+                        setSelectedVendor(e.target.value);
+                        setSelectedPropertyType("");
+                        setSelectedRegions([]);
                         setSelectedPaymentTerms("");
                       }}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] text-lg"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                     >
-                      <option value="">Choose Island</option>
-                      {availableIslands.map((island) => (
-                        <option key={island} value={island}>
-                          {island} (
-                          {getMatchingItemsCount(
-                            selectedVendor,
-                            island,
-                          )}{" "}
-                          items)
+                      <option value="">Select Vendor</option>
+                      {getAvailableVendors().map((vendor) => (
+                        <option key={vendor} value={vendor}>
+                          {vendor} (
+                          {getMatchingItemsCount(vendor)} items)
                         </option>
                       ))}
                     </select>
                   </div>
-                )}
 
-                {selectedIsland && (
-                  <div className="flex items-center text-gray-400">
-                    <ChevronRight className="w-6 h-6" />
-                  </div>
-                )}
-
-                {/* Payment Terms Selection */}
-                {selectedIsland && (
                   <div>
-                    <label className="block text-gray-900 mb-3">
-                      3. Select Payment Terms{" "}
+                    <label className="block text-gray-700 mb-2">
+                      Property Type{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={selectedPropertyType}
+                      onChange={(e) => {
+                        setSelectedPropertyType(e.target.value);
+                        setSelectedRegions([]);
+                        setSelectedPaymentTerms("");
+                      }}
+                      disabled={!selectedVendor}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
+                    >
+                      <option value="">
+                        Select Property Type
+                      </option>
+                      {getAvailablePropertyTypes().map(
+                        (type) => (
+                          <option key={type} value={type}>
+                            {type} (
+                            {getMatchingItemsCount(
+                              selectedVendor,
+                              type,
+                            )}{" "}
+                            items)
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <MultiSelectDropdown
+                      options={getAvailableRegions()}
+                      selectedValues={selectedRegions}
+                      onChange={(regions) => {
+                        setSelectedRegions(regions);
+                        setSelectedPaymentTerms("");
+                      }}
+                      label="Region"
+                      placeholder="Select Regions"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2">
+                      Payment Terms{" "}
                       <span className="text-red-500">*</span>
                     </label>
                     <select
@@ -429,458 +462,308 @@ export default function GeneratePOModal({
                       onChange={(e) =>
                         setSelectedPaymentTerms(e.target.value)
                       }
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] text-lg"
+                      disabled={
+                        !selectedVendor ||
+                        !selectedPropertyType ||
+                        selectedRegions.length === 0
+                      }
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
                     >
                       <option value="">
-                        Choose Payment Terms
+                        Select Payment Terms
                       </option>
-                      {availablePaymentTerms.map((terms) => (
-                        <option key={terms} value={terms}>
-                          {terms} (
-                          {getMatchingItemsCount(
-                            selectedVendor,
-                            selectedIsland,
-                            terms,
-                          )}{" "}
-                          items)
-                        </option>
-                      ))}
+                      {getAvailablePaymentTerms().map(
+                        (term) => (
+                          <option key={term} value={term}>
+                            {term}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
-                )}
-
-                {/* Next Button */}
-                {selectedVendor &&
-                  selectedIsland &&
-                  selectedPaymentTerms && (
-                    <div className="pt-6 border-t border-gray-200">
-                      <button
-                        onClick={handleNext}
-                        className="w-full px-6 py-3 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors text-lg"
-                      >
-                        Next: Preview Items (
-                        {getMatchingItemsCount(
-                          selectedVendor,
-                          selectedIsland,
-                          selectedPaymentTerms,
-                        )}{" "}
-                        items)
-                      </button>
-                    </div>
-                  )}
+                </div>
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={onClose}
+                    className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleNext}
+                    disabled={
+                      !selectedVendor ||
+                      !selectedPropertyType ||
+                      selectedRegions.length === 0 ||
+                      !selectedPaymentTerms
+                    }
+                    className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    Next: Preview PO{" "}
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             ) : (
-              /* Preview Screen */
               <div className="space-y-6">
-                {poData && (
-                  <>
-                    {/* PO Header */}
-                    <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                      <h3 className="text-gray-900 border-b border-gray-300 pb-2">
-                        PO Header Information
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-gray-600 text-sm">
-                            PO Number
-                          </label>
-                          <input
-                            type="text"
-                            value={poData.poNumber}
-                            onChange={(e) =>
-                              setPOData({
-                                ...poData,
-                                poNumber: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-gray-600 text-sm">
-                            PO Date
-                          </label>
-                          <input
-                            type="date"
-                            value={poData.poDate}
-                            onChange={(e) =>
-                              setPOData({
-                                ...poData,
-                                poDate: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-gray-600 text-sm">
-                            Payment Terms
-                          </label>
-                          <input
-                            type="text"
-                            value={selectedPaymentTerms}
-                            disabled
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1 bg-gray-100"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Delivery Information */}
-                    <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                      <h3 className="text-gray-900 border-b border-gray-300 pb-2">
-                        Delivery Information
-                      </h3>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          Please deliver to
-                        </label>
-                        <input
-                          type="text"
-                          value={poData.deliveryCompany}
-                          onChange={(e) =>
-                            setPOData({
-                              ...poData,
-                              deliveryCompany: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          Address
-                        </label>
-                        <textarea
-                          value={poData.deliveryAddress}
-                          onChange={(e) =>
-                            setPOData({
-                              ...poData,
-                              deliveryAddress: e.target.value,
-                            })
-                          }
-                          rows={3}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          PIC
-                        </label>
-                        <input
-                          type="text"
-                          value={poData.deliveryPIC}
-                          onChange={(e) =>
-                            setPOData({
-                              ...poData,
-                              deliveryPIC: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Vendor Information */}
-                    <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                      <h3 className="text-gray-900 border-b border-gray-300 pb-2">
-                        Vendor Information
-                      </h3>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          To (Vendor Name)
-                        </label>
-                        <input
-                          type="text"
-                          value={poData.vendorName}
-                          disabled
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1 bg-gray-100"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          Vendor Address
-                        </label>
-                        <input
-                          type="text"
-                          value={poData.vendorAddress}
-                          onChange={(e) =>
-                            setPOData({
-                              ...poData,
-                              vendorAddress: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-gray-600 text-sm">
-                          Vendor PIC
-                        </label>
-                        <input
-                          type="text"
-                          value={poData.vendorPIC}
-                          onChange={(e) =>
-                            setPOData({
-                              ...poData,
-                              vendorPIC: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg mt-1"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Delivery Detail Table */}
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
+                    PO Header Details
+                  </h3>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                     <div>
-                      <h3 className="text-gray-900 mb-3 border-b border-gray-300 pb-2">
-                        Delivery Detail
-                      </h3>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                        <p className="text-sm text-blue-700">
-                          💡 Set Item Status for each item
-                          before generating PO. Click any
-                          dropdown to change the status.
-                        </p>
-                      </div>
-                      <div className="overflow-x-auto border border-gray-300 rounded-lg">
-                        <table className="w-full">
-                          <thead className="bg-gray-100">
-                            <tr>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                No
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Item Status
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Brand
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Item Name
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Qty
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                UoM
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                PIC
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Property Code
-                              </th>
-                              <th className="px-3 py-2 text-left text-sm text-gray-700">
-                                Property Name
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {poData.items.map((item, index) => {
-                              const statusColors = {
-                                "Not Set":
-                                  "bg-gray-100 text-gray-800 border-gray-300",
-                                Ready:
-                                  "bg-green-50 text-green-800 border-green-300",
-                                Cancelled:
-                                  "bg-red-50 text-red-800 border-red-300",
-                              };
-                              const statusColor =
-                                statusColors[
-                                  item.itemStatus as keyof typeof statusColors
-                                ] || statusColors["Not Set"];
-
-                              return (
-                                <tr
-                                  key={index}
-                                  className="border-t border-gray-200"
-                                >
-                                  <td className="px-3 py-2 text-sm">
-                                    {index + 1}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    <select
-                                      value={item.itemStatus}
-                                      onChange={(e) => {
-                                        const updatedItems = [
-                                          ...poData.items,
-                                        ];
-                                        updatedItems[index] = {
-                                          ...item,
-                                          itemStatus: e.target
-                                            .value as
-                                            | "Not Set"
-                                            | "Ready"
-                                            | "Cancelled",
-                                        };
-                                        setPOData({
-                                          ...poData,
-                                          items: updatedItems,
-                                        });
-                                      }}
-                                      className={`px-2 py-1 border rounded text-xs ${statusColor}`}
-                                    >
-                                      <option value="Not Set">
-                                        Not Set
-                                      </option>
-                                      <option value="Ready">
-                                        Ready
-                                      </option>
-                                      <option value="Cancelled">
-                                        Cancelled
-                                      </option>
-                                    </select>
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.brand}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.itemName}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.quantity}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.uom}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.pic}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.propertyCode}
-                                  </td>
-                                  <td className="px-3 py-2 text-sm">
-                                    {item.propertyName}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
+                      <span className="text-sm text-gray-500 block">
+                        PO Number
+                      </span>
+                      <span className="text-gray-900 font-medium">
+                        {poData?.poNumber}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500 block">
+                        Vendor Name
+                      </span>
+                      <span className="text-gray-900 font-medium">
+                        {poData?.vendorName}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500 block">
+                        PO Date
+                      </span>
+                      <input
+                        type="date"
+                        value={poData?.poDate}
+                        disabled
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500 block">
+                        Payment Terms
+                      </span>
+                      <input
+                        type="text"
+                        value={poData?.paymentTerms}
+                        disabled
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
+                      />
                     </div>
 
-                    {/* Summary */}
-                    <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                      <div className="text-gray-900 border-b border-gray-300 pb-2 mb-2">
-                        <strong>Total Summary</strong>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <div className="text-sm text-gray-600">
-                            Total Items:
-                          </div>
-                          <div className="text-lg text-gray-900">
-                            {poData.items.length}
-                          </div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-gray-600">
-                            From PRs:
-                          </div>
-                          <div className="text-lg text-gray-900">
-                            {
-                              new Set(
-                                poData.items.map(
-                                  (i) => i.prNumber,
-                                ),
-                              ).size
-                            }
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-t border-gray-300 pt-2 mt-2">
-                        <div className="text-sm space-y-1">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">
-                              Items Ready:
-                            </span>
-                            <span className="text-green-700 font-medium">
-                              {
-                                poData.items.filter(
-                                  (i) =>
-                                    i.itemStatus === "Ready",
-                                ).length
-                              }
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">
-                              Items Not Set:
-                            </span>
-                            <span className="text-gray-700">
-                              {
-                                poData.items.filter(
-                                  (i) =>
-                                    i.itemStatus === "Not Set",
-                                ).length
-                              }
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">
-                              Items Cancelled:
-                            </span>
-                            <span className="text-red-700">
-                              {
-                                poData.items.filter(
-                                  (i) =>
-                                    i.itemStatus ===
-                                    "Cancelled",
-                                ).length
-                              }
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-t border-gray-300 pt-2 mt-2">
-                        <div className="flex justify-between text-lg">
-                          <span className="text-gray-900 font-medium">
-                            Total Quantity:
-                          </span>
-                          <span className="text-gray-900">
-                            {poData.items.reduce(
-                              (sum, item) =>
-                                sum + item.quantity,
-                              0,
-                            )}{" "}
-                            items
-                          </span>
-                        </div>
-                      </div>
+                    <div>
+                      <span className="text-sm text-gray-500 block mb-1">
+                        ETA{" "}
+                        <span className="text-red-500">*</span>
+                      </span>
+                      <input
+                        type="date"
+                        value={poData?.eta}
+                        onChange={(e) =>
+                          setPOData(
+                            poData
+                              ? {
+                                  ...poData,
+                                  eta: e.target.value,
+                                }
+                              : null,
+                          )
+                        }
+                        className="border border-gray-300 rounded px-2 py-1 text-sm w-full focus:ring-2 focus:ring-[#ec2224]"
+                        required
+                      />
                     </div>
-                  </>
-                )}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="bg-gray-50 text-gray-700 font-medium border-b">
+                      <tr>
+                        <th className="px-4 py-3">No</th>
+                        <th className="px-4 py-3">Brand</th>
+                        <th className="px-4 py-3">
+                          Brand Item
+                        </th>
+                        <th className="px-4 py-3">Item Name</th>
+                        <th className="px-4 py-3">City</th>
+                        <th className="px-4 py-3">Qty</th>
+                        <th className="px-4 py-3">PIC</th>
+                        <th className="px-4 py-3">Prop Code</th>
+                        <th className="px-4 py-3">Prop Name</th>
+                        <th className="px-4 py-3">Address</th>
+                        <th className="px-4 py-3 text-right">
+                          Unit Price
+                        </th>
+                        <th className="px-4 py-3 text-right">
+                          Total
+                        </th>
+                        <th
+                          className="px-4 py-3 text-center"
+                          style={{ width: "80px" }}
+                        >
+                          WHT %
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {poData?.items.map((item, idx) => (
+                        <tr
+                          key={idx}
+                          className={
+                            item.status === "Not Ready"
+                              ? "bg-gray-50/50"
+                              : ""
+                          }
+                        >
+                          <td className="px-4 py-3">
+                            {idx + 1}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.brandProperty}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.brandItem}
+                          </td>
+                          <td className="px-4 py-3 font-medium">
+                            {item.itemName}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.region}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.quantity}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.pic}
+                          </td>
+                          <td className="px-4 py-3">
+                            {item.propertyCode}
+                          </td>
+                          <td
+                            className="px-4 py-3 truncate max-w-[150px]"
+                            title={item.propertyName}
+                          >
+                            {item.propertyName}
+                          </td>
+                          <td
+                            className="px-4 py-3 truncate max-w-[150px]"
+                            title={item.propertyAddress}
+                          >
+                            {item.propertyAddress}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {new Intl.NumberFormat(
+                              "id-ID",
+                            ).format(item.unitPrice)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {new Intl.NumberFormat(
+                              "id-ID",
+                            ).format(
+                              item.unitPrice * item.quantity,
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <input
+                              type="number"
+                              value={item.whtPercentage}
+                              onChange={(e) => {
+                                const val =
+                                  parseFloat(e.target.value) ||
+                                  0;
+                                const newItems = [
+                                  ...(poData?.items || []),
+                                ];
+                                newItems[idx] = {
+                                  ...item,
+                                  whtPercentage: val,
+                                };
+                                setPOData(
+                                  poData
+                                    ? {
+                                        ...poData,
+                                        items: newItems,
+                                      }
+                                    : null,
+                                );
+                              }}
+                              className="w-12 border rounded px-1 text-center text-xs"
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Total Quantity:
+                    </span>
+                    <span className="font-medium">
+                      {totals.totalQty}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Total Amount:
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.totalAmount)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      Service Charge (
+                      {poData?.serviceChargePercentage}%):
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.sc)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">
+                      PPN ({poData?.ppnPercentage}%):
+                    </span>
+                    <span className="font-medium">
+                      {formatCurrency(totals.ppn)}
+                    </span>
+                  </div>
+                  <div className="border-t border-gray-300 pt-2 flex justify-between text-lg font-bold text-gray-900">
+                    <span>Grand Total:</span>
+                    <span>
+                      {formatCurrency(totals.grandTotal)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                  <div className="text-sm text-gray-500">
+                    {
+                      poData?.items.filter(
+                        (i) => i.status === "Ready",
+                      ).length
+                    }{" "}
+                    items marked as Ready.
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setStep("selection")}
+                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg"
+                    >
+                      Back
+                    </button>
+                    <button
+                      onClick={handleExportPO}
+                      className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" /> Generate
+                      PO
+                    </button>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-6 flex justify-end gap-3">
-            {step === "selection" ? (
-              <button
-                onClick={onClose}
-                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => setStep("selection")}
-                  className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  ← Back to Selection
-                </button>
-                <button
-                  onClick={handleExportPO}
-                  className="px-6 py-2 bg-[#ec2224] text-white rounded-lg hover:bg-[#d11f21] transition-colors flex items-center gap-2"
-                >
-                  <Download className="w-4 h-4" />
-                  Download/Export PO
-                </button>
-              </>
             )}
           </div>
         </div>

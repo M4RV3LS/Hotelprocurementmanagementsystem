@@ -36,7 +36,6 @@ export default function POPreviewModal({
     reqId: string;
   } | null>(null);
 
-  // Calculate stats for progress bar
   const totalItems = po.items.length;
   const deliveredItems = po.items.filter(
     (i) => i.status === "Delivered",
@@ -96,7 +95,7 @@ export default function POPreviewModal({
         linkProofItem.reqId,
         po.id,
         true,
-        proofIds, // Passing array of IDs
+        proofIds,
       );
       await refreshPO();
       setLinkProofItem(null);
@@ -123,13 +122,11 @@ export default function POPreviewModal({
     }
   };
 
-  // Helper to safely parse deliveryProofId which might be a JSON array string or a single ID
   const getLinkedProofs = (item: any) => {
     if (!item.deliveryProofId) return [];
 
     let ids: string[] = [];
 
-    // Check if it looks like a JSON array (starts with [)
     if (
       typeof item.deliveryProofId === "string" &&
       item.deliveryProofId.trim().startsWith("[")
@@ -137,11 +134,9 @@ export default function POPreviewModal({
       try {
         ids = JSON.parse(item.deliveryProofId);
       } catch {
-        // Fallback: treat as single ID if parse fails
         ids = [item.deliveryProofId];
       }
     } else {
-      // Legacy support: simple string ID
       ids = [item.deliveryProofId];
     }
 
@@ -150,7 +145,6 @@ export default function POPreviewModal({
     );
   };
 
-  // Requirement 4: Delete Handler
   const handleDeleteProof = async (proofId: string) => {
     if (
       !confirm(
@@ -173,7 +167,6 @@ export default function POPreviewModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60]">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[95vh] flex flex-col">
-        {/* Header */}
         <div className="border-b border-gray-200 px-8 py-5 flex justify-between items-center bg-gray-50 rounded-t-lg">
           <div className="flex items-center gap-4">
             <div>
@@ -201,7 +194,6 @@ export default function POPreviewModal({
         </div>
 
         <div className="p-8 overflow-y-auto bg-white space-y-8">
-          {/* Vendor Information */}
           <div className="border-b border-gray-100 pb-8">
             <div className="space-y-4">
               <h4 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
@@ -242,7 +234,6 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          {/* Progress Section */}
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-6">
             <div className="flex justify-between text-sm font-medium mb-2 text-blue-900">
               <span>Fulfillment Progress</span>
@@ -259,7 +250,6 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          {/* Requested Item List */}
           <div className="space-y-4">
             <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-[#ec2224] pl-3">
               Requested Item List
@@ -302,7 +292,6 @@ export default function POPreviewModal({
                   {po.items.map((item, index) => {
                     const isDelivered =
                       item.status === "Delivered";
-                    // Use helper to get array of proofs
                     const linkedProofs = getLinkedProofs(item);
 
                     return (
@@ -337,7 +326,7 @@ export default function POPreviewModal({
                           {item.itemName}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          {item.quantity} {item.uom}
+                          {item.quantity}
                         </td>
                         <td className="px-4 py-3">
                           {item.picName || "N/A"}
@@ -357,7 +346,6 @@ export default function POPreviewModal({
                         >
                           {item.propertyAddress || "N/A"}
                         </td>
-                        {/* Proof Attached Column (Fixed) */}
                         <td className="px-4 py-3">
                           {linkedProofs.length > 0 ? (
                             <div className="flex flex-col gap-1">
@@ -388,7 +376,6 @@ export default function POPreviewModal({
             </div>
           </div>
 
-          {/* BAST / Delivery Proofs */}
           <div className="space-y-4 pt-4 border-t border-gray-200">
             <div className="flex justify-between items-center">
               <h4 className="font-semibold text-gray-900 text-lg border-l-4 border-blue-500 pl-3">
@@ -419,7 +406,6 @@ export default function POPreviewModal({
                         <FileText className="w-6 h-6" />
                       </div>
                       <div className="flex gap-1">
-                        {/* Requirement 4: Delete Button */}
                         <button
                           onClick={(e) => {
                             e.preventDefault();
@@ -454,7 +440,6 @@ export default function POPreviewModal({
                         ).toLocaleDateString()}
                       </p>
                     </div>
-                    {/* Click card to view */}
                     <a
                       href={proof.fileLink}
                       target="_blank"

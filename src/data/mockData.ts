@@ -18,9 +18,63 @@ export interface DeliveryProof {
 export interface ItemCategory {
   id: string;
   name: string;
-  isActive: boolean; // Req 1: Added status
+  isActive: boolean;
   itemCount?: number;
 }
+
+// --- REQUIRED FOR VENDOR FORM ---
+export const PAYMENT_METHODS_LIST = [
+  "Bank Transfer",
+  "Cash",
+  "Cheque",
+  "Credit Card",
+  "Virtual Account",
+  "Term of Payment (TOP)",
+];
+
+export const INDONESIA_REGIONS = [
+  "DKI Jakarta",
+  "Jawa Barat",
+  "Jawa Tengah",
+  "Jawa Timur",
+  "Banten",
+  "DI Yogyakarta",
+  "Bali",
+  "Sumatera Utara",
+  "Sumatera Barat",
+  "Sumatera Selatan",
+  "Riau",
+  "Kepulauan Riau",
+  "Jambi",
+  "Bengkulu",
+  "Lampung",
+  "Kepulauan Bangka Belitung",
+  "Aceh",
+  "Nusa Tenggara Barat",
+  "Nusa Tenggara Timur",
+  "Kalimantan Barat",
+  "Kalimantan Tengah",
+  "Kalimantan Selatan",
+  "Kalimantan Timur",
+  "Kalimantan Utara",
+  "Sulawesi Utara",
+  "Sulawesi Tengah",
+  "Sulawesi Selatan",
+  "Sulawesi Tenggara",
+  "Gorontalo",
+  "Sulawesi Barat",
+  "Maluku",
+  "Maluku Utara",
+  "Papua",
+  "Papua Barat",
+];
+
+export const PROPERTY_TYPES = [
+  "Leasing",
+  "Franchise",
+  "Management",
+];
+// --------------------------------
 
 export const COMMODITIES_LIST = [
   { code: "1001", name: "Textiles & Fabrics" },
@@ -81,7 +135,7 @@ export type PaymentTerms =
   | "Payment Terms"
   | string;
 
-export type ItemType = "Product" | "Service"; // Req 3
+export type ItemType = "Product" | "Service";
 
 export interface ProcurementItem {
   id: string;
@@ -96,7 +150,6 @@ export interface ProcurementItem {
   commodityName?: string;
   selectedProperties: Record<string, string>;
   quantity: number;
-  uom: string;
   region: string;
   itemStatus: ItemStatus;
   status: ProcurementStatus;
@@ -131,13 +184,11 @@ export interface Item {
   brandName: string;
   itemCategory: string;
   categoryId?: string;
-  uom: string;
   isActive: boolean;
   description?: string;
   photos?: string[];
   commodityCode?: string;
   commodityName?: string;
-  // Req 2, 3, 4: New Fields
   itemType: ItemType;
   weightage?: number;
   length?: number;

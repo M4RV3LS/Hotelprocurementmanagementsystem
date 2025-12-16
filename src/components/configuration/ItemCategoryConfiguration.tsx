@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Settings,
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { itemCategoriesAPI, itemsAPI } from "../../utils/api";
 import Toast from "../Toast";
-import Toggle from "../Toggle"; // Assuming reusable Toggle component exists
+import Toggle from "../Toggle";
 import type { ItemCategory } from "../../data/mockData";
 
 export default function ItemCategoryConfiguration() {
@@ -93,10 +93,8 @@ export default function ItemCategoryConfiguration() {
     }
   };
 
-  // Req 1: Logic to toggle active/inactive
   const handleToggleStatus = async (category: ItemCategory) => {
     if (category.isActive) {
-      // Trying to deactivate: Check item count
       if ((category.itemCount || 0) > 0) {
         alert(
           `Cannot deactivate "${category.name}" because it still contains ${category.itemCount} items. Please move them first.`,
@@ -112,7 +110,6 @@ export default function ItemCategoryConfiguration() {
         newStatus,
       );
 
-      // Optimistic update
       setCategories((prev) =>
         prev.map((c) =>
           c.id === category.id
@@ -235,6 +232,62 @@ export default function ItemCategoryConfiguration() {
     (i) => !i.categoryId || i.categoryId === "null",
   );
 
+  // --- Requirement 1: Select All Logic ---
+
+  // 1. For "Move Items" Mode
+  const isAllMoveSelected = useMemo(() => {
+    if (!showManageModal || showManageModal.items.length === 0)
+      return false;
+    return showManageModal.items.every((item) =>
+      selectedToMove.includes(item.itemCode),
+    );
+  }, [showManageModal, selectedToMove]);
+
+  const handleToggleAllMove = () => {
+    if (!showManageModal) return;
+    if (isAllMoveSelected) {
+      setSelectedToMove([]);
+    } else {
+      setSelectedToMove(
+        showManageModal.items.map((i) => i.itemCode),
+      );
+    }
+  };
+
+  // 2. For "Add Items" Mode
+  // Filter available items based on search first
+  const filteredAvailableItems = useMemo(() => {
+    return availableItems.filter((i) =>
+      i.itemName
+        .toLowerCase()
+        .includes(itemSearch.toLowerCase()),
+    );
+  }, [availableItems, itemSearch]);
+
+  const isAllAddSelected = useMemo(() => {
+    if (filteredAvailableItems.length === 0) return false;
+    return filteredAvailableItems.every((item) =>
+      selectedToAdd.includes(item.itemCode),
+    );
+  }, [filteredAvailableItems, selectedToAdd]);
+
+  const handleToggleAllAdd = () => {
+    const visibleIds = filteredAvailableItems.map(
+      (i) => i.itemCode,
+    );
+    if (isAllAddSelected) {
+      // Uncheck all visible
+      setSelectedToAdd((prev) =>
+        prev.filter((id) => !visibleIds.includes(id)),
+      );
+    } else {
+      // Check all visible
+      setSelectedToAdd((prev) =>
+        Array.from(new Set([...prev, ...visibleIds])),
+      );
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -300,7 +353,6 @@ export default function ItemCategoryConfiguration() {
                     <Settings className="w-3 h-3" /> Manage
                     Items
                   </button>
-                  {/* Req 1: Toggle Switch instead of Delete */}
                   <div
                     className="flex items-center"
                     title={
@@ -312,7 +364,7 @@ export default function ItemCategoryConfiguration() {
                     <Toggle
                       enabled={cat.isActive}
                       onChange={() => handleToggleStatus(cat)}
-                      disabled={false} // Logic handled in function
+                      disabled={false}
                     />
                   </div>
                 </td>
@@ -443,6 +495,7 @@ export default function ItemCategoryConfiguration() {
 
             <div className="flex-1 overflow-hidden flex flex-col">
               {!isAddingItemsMode ? (
+                // --- MOVE ITEMS MODE ---
                 <>
                   <div className="flex justify-between items-end mb-4 gap-4">
                     <div className="flex-1">
@@ -495,6 +548,27 @@ export default function ItemCategoryConfiguration() {
                       <Plus className="w-4 h-4" /> Add Item
                     </button>
                   </div>
+
+                  {/* Select All Checkbox for Move Mode */}
+                  {showManageModal.items.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2 px-1 py-1 bg-gray-50 rounded border border-transparent hover:border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={isAllMoveSelected}
+                        onChange={handleToggleAllMove}
+                        className="rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        id="selectAllMove"
+                      />
+                      <label
+                        htmlFor="selectAllMove"
+                        className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                      >
+                        Select All (
+                        {showManageModal.items.length} items)
+                      </label>
+                    </div>
+                  )}
+
                   <div className="flex-1 overflow-y-auto border rounded-lg bg-gray-50 p-2">
                     {showManageModal.items.length > 0 ? (
                       showManageModal.items.map((item) => (
@@ -540,6 +614,7 @@ export default function ItemCategoryConfiguration() {
                   </div>
                 </>
               ) : (
+                // --- ADD ITEMS MODE ---
                 <>
                   <div className="mb-4 space-y-3">
                     <div className="relative">
@@ -555,7 +630,8 @@ export default function ItemCategoryConfiguration() {
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">
-                        Available: {availableItems.length}
+                        Available:{" "}
+                        {filteredAvailableItems.length}
                       </span>
                       <button
                         onClick={handleAddItemsToExisting}
@@ -567,48 +643,68 @@ export default function ItemCategoryConfiguration() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Select All Checkbox for Add Mode */}
+                  {filteredAvailableItems.length > 0 && (
+                    <div className="flex items-center gap-2 mb-2 px-1 py-1 bg-gray-50 rounded border border-transparent hover:border-gray-200">
+                      <input
+                        type="checkbox"
+                        checked={isAllAddSelected}
+                        onChange={handleToggleAllAdd}
+                        className="rounded text-green-600 focus:ring-green-500 cursor-pointer"
+                        id="selectAllAdd"
+                      />
+                      <label
+                        htmlFor="selectAllAdd"
+                        className="text-sm font-medium text-gray-700 cursor-pointer select-none"
+                      >
+                        Select All Visible (
+                        {filteredAvailableItems.length} items)
+                      </label>
+                    </div>
+                  )}
+
                   <div className="flex-1 overflow-y-auto border rounded-lg bg-gray-50 p-2">
-                    {availableItems
-                      .filter((i) =>
-                        i.itemName
-                          .toLowerCase()
-                          .includes(itemSearch.toLowerCase()),
-                      )
-                      .map((item) => (
-                        <label
-                          key={item.itemCode}
-                          className="flex items-center gap-3 p-3 bg-white border mb-2 rounded hover:shadow-sm cursor-pointer transition-shadow"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={selectedToAdd.includes(
-                              item.itemCode,
-                            )}
-                            onChange={(e) => {
-                              if (e.target.checked)
-                                setSelectedToAdd([
-                                  ...selectedToAdd,
-                                  item.itemCode,
-                                ]);
-                              else
-                                setSelectedToAdd(
-                                  selectedToAdd.filter(
-                                    (c) => c !== item.itemCode,
-                                  ),
-                                );
-                            }}
-                            className="rounded text-green-600 focus:ring-green-500"
-                          />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {item.itemName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {item.itemCode}
-                            </p>
-                          </div>
-                        </label>
-                      ))}
+                    {filteredAvailableItems.map((item) => (
+                      <label
+                        key={item.itemCode}
+                        className="flex items-center gap-3 p-3 bg-white border mb-2 rounded hover:shadow-sm cursor-pointer transition-shadow"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedToAdd.includes(
+                            item.itemCode,
+                          )}
+                          onChange={(e) => {
+                            if (e.target.checked)
+                              setSelectedToAdd([
+                                ...selectedToAdd,
+                                item.itemCode,
+                              ]);
+                            else
+                              setSelectedToAdd(
+                                selectedToAdd.filter(
+                                  (c) => c !== item.itemCode,
+                                ),
+                              );
+                          }}
+                          className="rounded text-green-600 focus:ring-green-500"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {item.itemName}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {item.itemCode}
+                          </p>
+                        </div>
+                      </label>
+                    ))}
+                    {filteredAvailableItems.length === 0 && (
+                      <div className="text-center py-8 text-gray-400 text-sm">
+                        No items match your search.
+                      </div>
+                    )}
                   </div>
                 </>
               )}

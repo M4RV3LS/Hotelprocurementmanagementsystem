@@ -4,7 +4,6 @@ import type {
   ProcurementRequest,
   PurchaseOrder,
   DeliveryProof,
-  ItemCategory,
 } from "../data/mockData";
 
 const API_BASE = "/make-server-1e4a32a5";
@@ -119,7 +118,6 @@ export const procurementRequestsAPI = {
             item.master_items?.category || "Ops Item",
           selectedProperties: {},
           quantity: item.quantity,
-          uom: item.uom,
           region: region,
           itemStatus: item.item_status || "Not Set",
           status: item.status,
@@ -215,7 +213,6 @@ export const procurementRequestsAPI = {
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
-      uom: item.uom,
       assigned_vendor_id: item.vendorCode
         ? vendorMap.get(item.vendorCode)
         : null,
@@ -317,7 +314,6 @@ export const purchaseOrdersAPI = {
         request_id: i.request_id,
         itemName: i.master_items?.name || i.item_name_snapshot,
         quantity: i.quantity,
-        uom: i.uom,
         unitPrice: i.unit_price,
         totalPrice: i.total_price,
         status: i.status,
@@ -710,8 +706,7 @@ export const vendorsAPI = {
       bankAccountDocLink: v.bank_account_doc_link,
       legalDocLink: v.legal_doc_link,
 
-      // Requirement 1: New Legal Mappings (mapped from extra columns or JSONB 'legal_info' if schema varies)
-      // Assuming DB columns exist or strictly mapping to avoid TS errors
+      // Extra Legal Fields mapping
       sppkpNumber: v.sppkp_number,
       sppkpFileLink: v.sppkp_file_link,
       deedNumber: v.deed_number,
@@ -753,8 +748,6 @@ export const vendorsAPI = {
           {
             code: vendor.vendorCode,
             name: vendor.vendorName,
-            // vendor_type: vendor.vendorType, // Removed based on previous fix
-
             region: Array.isArray(vendor.vendorRegion)
               ? vendor.vendorRegion
               : [vendor.vendorRegion],
@@ -786,7 +779,7 @@ export const vendorsAPI = {
             bank_account_doc_link: vendor.bankAccountDocLink,
             legal_doc_link: vendor.legalDocLink,
 
-            // Requirement 1: New Fields Mapping
+            // Extra Legal Fields
             sppkp_number: vendor.sppkpNumber,
             sppkp_file_link: vendor.sppkpFileLink,
             deed_number: vendor.deedNumber,
@@ -812,7 +805,6 @@ export const vendorsAPI = {
     if (vendorError) throw vendorError;
     const vendorId = vendorData.id;
 
-    // ... [Keep existing item catalog saving logic] ...
     if (vendor.items && vendor.items.length > 0) {
       const itemCodes = vendor.items.map(
         (i: any) => i.itemCode,
@@ -888,13 +880,11 @@ export const itemsAPI = {
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
       categoryId: i.category_id,
-      uom: i.uom,
       isActive: i.is_active,
       description: i.description,
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
-      // Req 2, 3, 4: Map new fields
       itemType: i.item_type || "Product",
       weightage: i.weightage,
       length: i.length,
@@ -914,13 +904,11 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           category_id: item.categoryId,
-          uom: item.uom,
           is_active: item.isActive,
           description: item.description,
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
-          // Req 2, 3, 4: Save new fields
           item_type: item.itemType,
           weightage: item.weightage,
           length: item.length,
@@ -935,6 +923,36 @@ export const itemsAPI = {
 
     if (error) throw error;
     return { ...item };
+  },
+
+  bulkSave: async (items: any[]) => {
+    const itemsToUpsert = items.map((item) => ({
+      code: item.itemCode,
+      name: item.itemName,
+      brand_name: item.brandName,
+      category: item.itemCategory,
+      category_id: item.categoryId,
+      is_active: item.isActive,
+      description: item.description,
+      photos: item.photos || [],
+      commodity_code: item.commodityCode,
+      commodity_name: item.commodityName,
+      item_type: item.itemType,
+      weightage: item.weightage,
+      length: item.length,
+      width: item.width,
+      height: item.height,
+      weight: item.weight,
+    }));
+
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < itemsToUpsert.length; i += BATCH_SIZE) {
+      const batch = itemsToUpsert.slice(i, i + BATCH_SIZE);
+      const { error } = await supabase
+        .from("master_items")
+        .upsert(batch, { onConflict: "code" });
+      if (error) throw error;
+    }
   },
 
   delete: async (code: string) => {
@@ -973,13 +991,12 @@ export const itemCategoriesAPI = {
   getAll: async () => {
     const { data, error } = await supabase
       .from("item_categories")
-      .select(`*, items:master_items(count)`); // Count items to handle Deactivate logic
+      .select(`*, items:master_items(count)`);
 
     if (error) throw error;
 
     return data.map((cat: any) => ({
       ...cat,
-      // Map isActive status
       isActive: cat.is_active ?? true,
       itemCount: cat.items?.[0]?.count || 0,
     }));
@@ -995,10 +1012,6 @@ export const itemCategoriesAPI = {
     return data;
   },
 
-  // Req 1: Removed Delete capability (commented out or replaced with toggle logic)
-  // delete: async (id: string) => { ... }
-
-  // Req 1: New Toggle Status API
   toggleStatus: async (id: string, isActive: boolean) => {
     const { error } = await supabase
       .from("item_categories")
@@ -1066,7 +1079,6 @@ export const initializeDatabase = async (data: {
             name: item.itemName,
             brand_name: item.brandName,
             category: item.itemCategory,
-            uom: item.uom,
             is_active: item.isActive,
             commodity_code: item.commodityCode,
             commodity_name: item.commodityName,
@@ -1093,7 +1105,6 @@ export const initializeDatabase = async (data: {
         payment_methods: v.paymentMethods,
         ppn_percentage: v.ppnPercentage,
         is_active: v.isActive,
-        // vendor_type: v.vendorType, // Removed
         nib_number: v.nibNumber,
         npwpd_number: v.npwpNumber,
       }));
@@ -1183,7 +1194,6 @@ export const initializeDatabase = async (data: {
               status: item.status,
               item_status: item.itemStatus,
               quantity: item.quantity,
-              uom: item.uom,
               assigned_vendor_id: vendorId,
               payment_terms: item.paymentTerms,
               unit_price: item.unitPrice,
@@ -1191,7 +1201,7 @@ export const initializeDatabase = async (data: {
               tax_amount: item.taxAmount,
               total_price: item.totalPrice,
               po_number: item.poNumber,
-              po_date: item.poDate
+              po_date: item.po_date
                 ? new Date(item.poDate)
                 : null,
               estimated_delivery_start:

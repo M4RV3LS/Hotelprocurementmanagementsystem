@@ -452,6 +452,10 @@
     pointer-events: none;
   }
 
+  .visible {
+    visibility: visible;
+  }
+
   .absolute {
     position: absolute;
   }
@@ -1830,6 +1834,11 @@
     outline-style: none;
   }
 
+  .select-none {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
   .fade-in {
     --tw-enter-opacity: 0;
   }
@@ -1857,6 +1866,12 @@
   @media (hover: hover) {
     .hover\:border-\[\#ec2224\]:hover {
       border-color: #ec2224;
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:border-gray-200:hover {
+      border-color: var(--color-gray-200);
     }
   }
 

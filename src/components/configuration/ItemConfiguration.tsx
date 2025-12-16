@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Plus, Edit2, Download, Upload } from "lucide-react"; // Added icons
+import { Plus, Edit2, Download, Upload } from "lucide-react";
 import ItemFormModal from "./ItemFormModal";
 import ConfirmationModal from "./ConfirmationModal";
 import Toast from "../Toast";
@@ -10,10 +10,19 @@ export type Item = {
   itemName: string;
   brandName: string;
   itemCategory: string;
+  categoryId: string;
   uom: string;
   isActive: boolean;
-  // Optional fields for completeness based on previous context
   weightage?: number;
+  description?: string;
+  photos?: string[];
+  commodityCode?: string;
+  commodityName?: string;
+  itemType?: "Product" | "Service";
+  length?: number;
+  width?: number;
+  height?: number;
+  weight?: number;
 };
 
 interface ItemConfigurationProps {
@@ -178,7 +187,7 @@ export default function ItemConfiguration({
             <option value="inactive">Inactive Only</option>
           </select>
 
-          {/* DESIGN REQ 1: Download Template Button */}
+          {/* Download Template Button */}
           <button
             onClick={handleDownloadTemplate}
             className="px-4 py-2 border border-gray-300 text-gray-700 bg-white rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
@@ -188,7 +197,7 @@ export default function ItemConfiguration({
             <span className="hidden xl:inline">Template</span>
           </button>
 
-          {/* DESIGN REQ 2: Bulk Upload Button */}
+          {/* Bulk Upload Button */}
           <button
             onClick={handleBulkUpload}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium whitespace-nowrap"
@@ -231,9 +240,7 @@ export default function ItemConfiguration({
                 <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Category
                 </th>
-                <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
-                  UoM
-                </th>
+                {/* Requirement 1: UoM Column Removed */}
                 <th className="px-6 py-3 text-left text-gray-700 text-sm font-semibold">
                   Weightage
                 </th>
@@ -249,7 +256,7 @@ export default function ItemConfiguration({
               {filteredItems.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7} // Reduced colspan due to removed column
                     className="px-6 py-12 text-center text-gray-500"
                   >
                     No items found
@@ -277,9 +284,7 @@ export default function ItemConfiguration({
                     <td className="px-6 py-4 text-gray-700">
                       {item.itemCategory}
                     </td>
-                    <td className="px-6 py-4 text-gray-700">
-                      {item.uom}
-                    </td>
+                    {/* Requirement 1: UoM Cell Removed */}
                     <td className="px-6 py-4 text-gray-900">
                       {item.weightage ?? "-"}
                     </td>

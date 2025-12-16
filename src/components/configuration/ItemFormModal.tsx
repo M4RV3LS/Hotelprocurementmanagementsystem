@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Image as ImageIcon } from "lucide-react";
 import { itemCategoriesAPI } from "../../utils/api";
-import type { Item, ItemType } from "../../data/mockData";
+import type { Item } from "./ItemConfiguration";
 import {
   BRAND_NAMES,
   COMMODITIES_LIST,
@@ -25,14 +25,13 @@ export default function ItemFormModal({
       brandName: "",
       itemCategory: "",
       categoryId: "",
-      uom: "",
+      uom: "Unit", // Requirement 1: Default to "Unit" to satisfy DB constraint since field is hidden
       description: "",
       photos: [],
       isActive: true,
       commodityCode: "",
       commodityName: "",
-      // New Fields Defaults
-      itemType: "Product" as ItemType,
+      itemType: "Product",
       weightage: 0,
       length: 0,
       width: 0,
@@ -114,7 +113,7 @@ export default function ItemFormModal({
             onSubmit={handleSubmit}
             className="p-6 space-y-6"
           >
-            {/* Req 3: Item Type Selection */}
+            {/* Item Type Selection */}
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <label className="block text-gray-700 font-medium mb-3">
                 Item Type{" "}
@@ -193,7 +192,7 @@ export default function ItemFormModal({
                 />
               </div>
 
-              {/* Req 2: Weightage Field */}
+              {/* Weightage Field */}
               <div>
                 <label className="block text-gray-700 mb-2">
                   Weightage
@@ -236,7 +235,7 @@ export default function ItemFormModal({
                 </select>
               </div>
 
-              {/* CHANGE MADE HERE: Wrapped Commodities in conditional check */}
+              {/* Commodities wrapped in conditional check */}
               {formData.itemType === "Product" && (
                 <div>
                   <label className="block text-gray-700 mb-2">
@@ -295,23 +294,10 @@ export default function ItemFormModal({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-gray-700 mb-2">
-                  UoM <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.uom}
-                  onChange={(e) =>
-                    handleInputChange("uom", e.target.value)
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                />
-              </div>
+              {/* Requirement 1: UoM Field Removed */}
             </div>
 
-            {/* Req 4: Dimensions & Weight (Only for Physical Products) */}
+            {/* Dimensions & Weight (Only for Physical Products) */}
             {formData.itemType === "Product" && (
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                 <h4 className="font-medium text-gray-900 mb-3 text-sm">

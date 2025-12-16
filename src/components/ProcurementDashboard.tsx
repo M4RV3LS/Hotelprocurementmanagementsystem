@@ -23,7 +23,6 @@ import { purchaseOrdersAPI } from "../utils/api";
 
 const ITEMS_PER_PAGE = 10;
 
-// Requirement 1: Added "Cancelled by Procurement" to filters
 const statuses: Array<ProcurementStatus | "All"> = [
   "All",
   "Review by Procurement",
@@ -41,10 +40,6 @@ const propertyTypes = [
   "Management",
 ];
 
-// ... [Rest of the file remains unchanged] ...
-// (Include the rest of the interfaces and component logic exactly as they were,
-// just ensure the 'statuses' array above is updated)
-
 interface TableRow {
   prNumber: string;
   propertyName: string;
@@ -53,7 +48,6 @@ interface TableRow {
   status: string;
   itemName: string;
   quantity: number;
-  uom: string;
   requestDate: string;
   request: ProcurementRequest;
   item: ProcurementItem;
@@ -94,7 +88,6 @@ export default function ProcurementDashboard({
   const [highlightedPRNumber, setHighlightedPRNumber] =
     useState<string | null>(null);
 
-  // Modals
   const [showGeneratePOModal, setShowGeneratePOModal] =
     useState(false);
   const [selectedPRNumberForPO, setSelectedPRNumberForPO] =
@@ -106,10 +99,8 @@ export default function ProcurementDashboard({
   const [selectedPropertyType, setSelectedPropertyType] =
     useState("All");
 
-  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Reject Modal State
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectItemTarget, setRejectItemTarget] = useState<{
     itemId: string;
@@ -123,7 +114,6 @@ export default function ProcurementDashboard({
     }
   }, [externalRequests]);
 
-  // Convert requests to table rows based on ITEMS
   const tableRows = useMemo(() => {
     const rows: TableRow[] = [];
     requests.forEach((request) => {
@@ -137,7 +127,6 @@ export default function ProcurementDashboard({
           status: item.status,
           itemName: itemDisplay,
           quantity: item.quantity,
-          uom: item.uom,
           requestDate: request.prDate,
           request: request,
           item: item,
@@ -149,7 +138,6 @@ export default function ProcurementDashboard({
   }, [requests]);
 
   const filteredData = useMemo(() => {
-    // Start by filtering out "Pending Approval" items (Requirement 1)
     let filtered = tableRows.filter(
       (row) => row.status !== "Pending Approval",
     );
@@ -195,7 +183,6 @@ export default function ProcurementDashboard({
     tableRows,
   ]);
 
-  // Pagination Logic
   const totalPages = Math.ceil(
     filteredData.length / ITEMS_PER_PAGE,
   );
@@ -218,7 +205,6 @@ export default function ProcurementDashboard({
     );
   };
 
-  // Reject Logic
   const initiateReject = (item: ProcurementItem) => {
     setRejectItemTarget({
       itemId: item.id,
@@ -242,7 +228,6 @@ export default function ProcurementDashboard({
         file,
       );
 
-      // Local Update
       const updatedRequests = requests.map((req) => ({
         ...req,
         items: req.items.map((item) =>
@@ -343,7 +328,6 @@ export default function ProcurementDashboard({
 
   return (
     <div className="space-y-6">
-      {/* Filters Section */}
       <div>
         <h1 className="text-gray-900 mb-6">
           Procurement Dashboard
@@ -457,7 +441,6 @@ export default function ProcurementDashboard({
         </div>
       </div>
 
-      {/* Data Table and other components remain unchanged */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -479,7 +462,7 @@ export default function ProcurementDashboard({
                   Item Name
                 </th>
                 <th className="px-6 py-3 text-left text-gray-700">
-                  Quantity + UoM
+                  Quantity
                 </th>
                 <th className="px-6 py-3 text-left text-gray-700">
                   Request Date
@@ -536,7 +519,7 @@ export default function ProcurementDashboard({
                         {row.itemName}
                       </td>
                       <td className="px-6 py-4 text-gray-700">
-                        {row.quantity} {row.uom}
+                        {row.quantity}
                       </td>
                       <td className="px-6 py-4">
                         <span className="text-gray-700">
@@ -575,7 +558,6 @@ export default function ProcurementDashboard({
           </table>
         </div>
 
-        {/* Pagination Logic... */}
         <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Showing{" "}
