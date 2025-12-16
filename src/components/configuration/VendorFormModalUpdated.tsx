@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 
+// ... (Rest of interfaces kept same for brevity, showing modification below)
+
 // --- Interfaces ---
 
 interface Agreement {
@@ -36,13 +38,12 @@ interface VendorItem {
   masterPhotos?: string[];
 }
 
-// Extended Vendor interface
 interface ExtendedVendor
   extends Omit<Vendor, "agreements" | "items"> {
   agreements: Agreement[];
   items: VendorItem[];
   deliveryFee?: number;
-  // Legal & Admin Fields
+  // ... Legal fields same as before
   nibNumber?: string;
   nibFileLink?: string;
   ktpNumber?: string;
@@ -69,7 +70,6 @@ interface ExtendedVendor
   bankAccountNumber?: string;
   bankAccountDocLink?: string;
   legalDocLink?: string;
-
   picName?: string;
   email2?: string;
 }
@@ -144,6 +144,7 @@ export default function VendorFormModalUpdated({
   onSave,
   items,
 }: VendorFormModalProps) {
+  // Main Form State
   const [formData] = useState<ExtendedVendor>(
     vendor || {
       vendorCode: "",
@@ -170,6 +171,7 @@ export default function VendorFormModalUpdated({
     },
   );
 
+  // Vendor Items State
   const [vendorItems, setVendorItems] = useState<VendorItem[]>(
     (formData.items || []).map((i) => ({
       ...i,
@@ -183,11 +185,13 @@ export default function VendorFormModalUpdated({
     })),
   );
 
+  // Modal States
   const [showAddItem, setShowAddItem] = useState(false);
   const [editingItemIndex, setEditingItemIndex] = useState<
     number | null
   >(null);
 
+  // New Item State
   const [newItem, setNewItem] = useState<VendorItem>({
     itemCode: "",
     itemName: "",
@@ -200,20 +204,6 @@ export default function VendorFormModalUpdated({
     propertyTypes: [],
     selectedPhotos: [],
   });
-
-  // Requirement 4: Dummy structure for read-only display
-  const dummyRegionalCoverage = [
-    {
-      province: "DKI Jakarta",
-      city: "Jakarta Selatan",
-      district: "Setiabudi",
-    },
-    {
-      province: "Jawa Barat",
-      city: "Bandung",
-      district: "Cicendo",
-    },
-  ];
 
   // --- Handlers ---
 
@@ -233,30 +223,19 @@ export default function VendorFormModalUpdated({
   };
 
   const handleAddItemToVendor = () => {
-    // Requirement 7: Mandatory Fields Check
     if (!newItem.itemCode)
-      return alert("Select Item is mandatory");
-    if (!newItem.minQuantity || newItem.minQuantity <= 0)
-      return alert("Min Quantity is mandatory and must be > 0");
-    if (!newItem.multipleOf || newItem.multipleOf <= 0)
-      return alert("Multiple Of is mandatory and must be > 0");
-    if (!newItem.priceType)
-      return alert(
-        "Pricing Configuration (Price Type) is mandatory",
-      );
+      return alert("Please select an item");
+    if (newItem.minQuantity <= 0)
+      return alert("Min Qty must be > 0");
+    if (newItem.multipleOf <= 0)
+      return alert("Multiple Of must be > 0");
 
     if (newItem.priceType === "Fixed") {
       if (!newItem.agreementNumber)
-        return alert("Agreement is mandatory for Fixed Price");
-      if (!newItem.unitPrice || newItem.unitPrice <= 0)
-        return alert("Unit Price is mandatory for Fixed Price");
+        return alert("Fixed Price requires an Agreement");
+      if (newItem.unitPrice <= 0)
+        return alert("Fixed Price requires Unit Price > 0");
     }
-
-    if (
-      !newItem.selectedPhotos ||
-      newItem.selectedPhotos.length === 0
-    )
-      return alert("Select Photo is mandatory");
 
     if (editingItemIndex !== null) {
       setVendorItems((prev) =>
@@ -290,6 +269,7 @@ export default function VendorFormModalUpdated({
     setShowAddItem(true);
   };
 
+  // --- Tick All Logic ---
   const isAllSelected = (type: string) => {
     if (vendorItems.length === 0) return false;
     return vendorItems.every((item) =>
@@ -390,80 +370,32 @@ export default function VendorFormModalUpdated({
                   label="PIC Name"
                   value={formData.picName}
                 />
-
-                {/* Requirement 3: Email 1, Email 2, Phone */}
-                <ReadOnlyField
-                  label="Email 1"
-                  value={formData.vendorEmail}
-                />
-                <ReadOnlyField
-                  label="Email 2"
-                  value={formData.email2}
-                />
-                <ReadOnlyField
-                  label="Phone"
-                  value={formData.vendorPhone}
-                />
-
                 <div className="col-span-3">
                   <ReadOnlyField
                     label="Address"
                     value={formData.vendorAddress}
                   />
                 </div>
-
-                {/* Requirement 4: Regional Coverage Structure (Dummy Data Display) */}
                 <div className="col-span-3">
                   <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
                     Regional Coverage
                   </label>
-                  <div className="bg-white border border-gray-200 rounded p-2">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-gray-500 text-xs uppercase border-b bg-gray-50">
-                        <tr>
-                          <th className="px-2 py-1">
-                            Province
-                          </th>
-                          <th className="px-2 py-1">
-                            City/Regency
-                          </th>
-                          <th className="px-2 py-1">
-                            District
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dummyRegionalCoverage.map((cov, i) => (
-                          <tr
-                            key={i}
-                            className="border-b last:border-0"
-                          >
-                            <td className="px-2 py-1">
-                              {cov.province}
-                            </td>
-                            <td className="px-2 py-1">
-                              {cov.city}
-                            </td>
-                            <td className="px-2 py-1">
-                              {cov.district}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {/* Fallback legacy display if needed */}
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {Array.isArray(formData.vendorRegion) &&
-                        formData.vendorRegion.length > 0 &&
-                        formData.vendorRegion.map((r, i) => (
-                          <span
-                            key={i}
-                            className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded"
-                          >
-                            {r}
-                          </span>
-                        ))}
-                    </div>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.isArray(formData.vendorRegion) &&
+                    formData.vendorRegion.length > 0 ? (
+                      formData.vendorRegion.map((r, i) => (
+                        <span
+                          key={i}
+                          className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded border border-blue-200"
+                        >
+                          {r}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500">
+                        -
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -484,6 +416,7 @@ export default function VendorFormModalUpdated({
                 />
                 <div className="col-span-3"></div>
 
+                {/* Standard Fields */}
                 <ReadOnlyField
                   label="NPWP Number"
                   value={formData.npwpNumber}
@@ -492,6 +425,7 @@ export default function VendorFormModalUpdated({
                   label="NPWP Doc"
                   link={formData.npwpFileLink}
                 />
+
                 <ReadOnlyField
                   label="NIB Number"
                   value={formData.nibNumber}
@@ -500,6 +434,7 @@ export default function VendorFormModalUpdated({
                   label="NIB Doc"
                   link={formData.nibFileLink}
                 />
+
                 <ReadOnlyField
                   label="KTP Number"
                   value={formData.ktpNumber}
@@ -509,6 +444,7 @@ export default function VendorFormModalUpdated({
                   link={formData.ktpFileLink}
                 />
 
+                {/* Additional Requested Fields */}
                 <ReadOnlyField
                   label="SPPKP Number"
                   value={formData.sppkpNumber}
@@ -574,7 +510,7 @@ export default function VendorFormModalUpdated({
 
                 <div className="col-span-1"></div>
                 <ReadOnlyFileLink
-                  label="Other License"
+                  label="Other License (File Only)"
                   link={formData.otherLicenseFileLink}
                 />
               </div>
@@ -623,30 +559,6 @@ export default function VendorFormModalUpdated({
                   label="PB1 (%)"
                   value={formData.pb1Percentage}
                 />
-
-                {/* Requirement 5: Payment Method */}
-                <div className="col-span-4">
-                  <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
-                    Payment Methods
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    {formData.paymentMethods &&
-                    formData.paymentMethods.length > 0 ? (
-                      formData.paymentMethods.map((pm) => (
-                        <span
-                          key={pm}
-                          className="bg-white border border-gray-300 rounded px-2 py-1 text-sm text-gray-800"
-                        >
-                          {pm}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-sm text-gray-500">
-                        -
-                      </span>
-                    )}
-                  </div>
-                </div>
               </div>
             </section>
 
@@ -740,6 +652,7 @@ export default function VendorFormModalUpdated({
                       <th className="px-4 py-3">Min Qty</th>
                       <th className="px-4 py-3">Multiple Of</th>
                       <th className="px-4 py-3">Agreement</th>
+                      {/* Tick All Headers */}
                       {PROPERTY_TYPES.map((type) => (
                         <th
                           key={type}
@@ -901,8 +814,7 @@ export default function VendorFormModalUpdated({
               {/* Item Selection */}
               <div>
                 <label className="block text-sm font-medium mb-1 text-gray-700">
-                  Select Item{" "}
-                  <span className="text-red-500">*</span>
+                  Select Item
                 </label>
                 <select
                   className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-[#ec2224] outline-none bg-white"
@@ -932,8 +844,7 @@ export default function VendorFormModalUpdated({
               <div className="grid grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">
-                    Min Quantity (MOQ){" "}
-                    <span className="text-red-500">*</span>
+                    Min Quantity (MOQ)
                   </label>
                   <input
                     type="number"
@@ -950,8 +861,7 @@ export default function VendorFormModalUpdated({
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1 text-gray-700">
-                    Multiple Of{" "}
-                    <span className="text-red-500">*</span>
+                    Multiple Of
                   </label>
                   <input
                     type="number"
@@ -974,8 +884,7 @@ export default function VendorFormModalUpdated({
               {/* Pricing & Agreement */}
               <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                 <label className="block text-sm font-medium mb-3 text-gray-700">
-                  Pricing Configuration{" "}
-                  <span className="text-red-500">*</span>
+                  Pricing Configuration
                 </label>
 
                 <div className="flex gap-6 mb-4">
@@ -1072,9 +981,10 @@ export default function VendorFormModalUpdated({
                       />
                     </div>
                   </div>
+                  {/* Requirement #8: Changed Tax Label to WHT% */}
                   <div>
                     <label className="block text-sm font-medium mb-1 text-gray-700">
-                      WHT (%)
+                      WHT%
                     </label>
                     <input
                       type="number"
@@ -1097,8 +1007,7 @@ export default function VendorFormModalUpdated({
                 newItem.masterPhotos.length > 0 && (
                   <div className="border-t pt-4">
                     <label className="block text-sm font-medium mb-2 text-gray-700">
-                      Select Item Photos to Display{" "}
-                      <span className="text-red-500">*</span>
+                      Select Item Photos to Display
                     </label>
                     <div className="grid grid-cols-4 gap-3">
                       {newItem.masterPhotos.map(

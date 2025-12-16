@@ -4,6 +4,7 @@ import type {
   ProcurementRequest,
   PurchaseOrder,
   DeliveryProof,
+  ItemCategory,
 } from "../data/mockData";
 
 const API_BASE = "/make-server-1e4a32a5";
@@ -23,6 +24,8 @@ const supabase = createClient(
   `https://${projectId}.supabase.co`,
   publicAnonKey,
 );
+
+// --- Helpers ---
 
 // Helper to check and update PR status
 const checkAndClosePR = async (prNumber: string) => {
@@ -53,6 +56,15 @@ const checkAndClosePR = async (prNumber: string) => {
     .eq("pr_number", prNumber);
 };
 
+// Helper function to determine region from a procurement request row
+const determineRegion = (row: any): string => {
+  if (row.region) return row.region;
+  if (row.request_items?.[0]) {
+    return "DKI Jakarta";
+  }
+  return "DKI Jakarta";
+};
+
 // Internal Helper for Activity Logs
 const _logActivityInternal = async (
   requestId: string,
@@ -71,6 +83,8 @@ const _logActivityInternal = async (
     });
   if (error) console.error("Failed to log activity:", error);
 };
+
+// --- API EXPORTS ---
 
 export const procurementRequestsAPI = {
   getAll: async (): Promise<ProcurementRequest[]> => {
@@ -118,6 +132,7 @@ export const procurementRequestsAPI = {
             item.master_items?.category || "Ops Item",
           selectedProperties: {},
           quantity: item.quantity,
+          // UoM Removed
           region: region,
           itemStatus: item.item_status || "Not Set",
           status: item.status,
@@ -213,6 +228,7 @@ export const procurementRequestsAPI = {
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
+      // UoM Removed
       assigned_vendor_id: item.vendorCode
         ? vendorMap.get(item.vendorCode)
         : null,
@@ -314,6 +330,7 @@ export const purchaseOrdersAPI = {
         request_id: i.request_id,
         itemName: i.master_items?.name || i.item_name_snapshot,
         quantity: i.quantity,
+        // UoM Removed
         unitPrice: i.unit_price,
         totalPrice: i.total_price,
         status: i.status,
@@ -676,14 +693,12 @@ export const vendorsAPI = {
       vendorName: v.name,
       vendorType: v.vendor_type || "Corporation",
 
-      // Requirement 4: Handling Regional Coverage as structured data (JSONB)
       regionalCoverages: v.regional_coverage || [],
       vendorRegion: v.region,
 
-      // Requirement 3: Emails and Phone
       vendorAddress: v.address,
-      vendorEmail: v.email, // Email 1
-      email2: v.email_2 || "", // Email 2 (Mapping to a potential column or placeholder)
+      vendorEmail: v.email,
+      email2: v.email_2 || "",
       vendorPhone: v.phone,
 
       contact_person: v.contact_person,
@@ -700,7 +715,6 @@ export const vendorsAPI = {
         ? v.agreements
         : [],
 
-      // Legal Fields
       nibNumber: v.nib_number,
       nibFileLink: v.nib_file_link,
       ktpNumber: v.ktp_number,
@@ -713,7 +727,6 @@ export const vendorsAPI = {
       bankAccountDocLink: v.bank_account_doc_link,
       legalDocLink: v.legal_doc_link,
 
-      // Extra Legal Fields
       sppkpNumber: v.sppkp_number,
       sppkpFileLink: v.sppkp_file_link,
       deedNumber: v.deed_number,
@@ -747,7 +760,6 @@ export const vendorsAPI = {
   },
 
   save: async (vendor: any): Promise<any> => {
-    // Upsert Vendor
     const { data: vendorData, error: vendorError } =
       await supabase
         .from("vendors")
@@ -755,16 +767,16 @@ export const vendorsAPI = {
           {
             code: vendor.vendorCode,
             name: vendor.vendorName,
+            // vendor_type: vendor.vendorType, // Removed to avoid Schema Error PGRST204
 
-            // Regions & Structured Coverage
             region: Array.isArray(vendor.vendorRegion)
               ? vendor.vendorRegion
               : [vendor.vendorRegion],
-            regional_coverage: vendor.regionalCoverages, // Saving structured data
+            regional_coverage: vendor.regionalCoverages,
 
             address: vendor.vendorAddress,
             email: vendor.vendorEmail,
-            // email_2: vendor.email2, // Assuming column exists or is ignored if RLS/Schema allows
+            // email_2: vendor.email2,
             phone: vendor.vendorPhone,
             contact_person:
               vendor.picName || vendor.contact_person,
@@ -778,7 +790,6 @@ export const vendorsAPI = {
             agreement_link: vendor.vendorAgreementLink,
             agreements: vendor.agreements,
 
-            // Legal Mappings
             nib_number: vendor.nibNumber,
             nib_file_link: vendor.nibFileLink,
             ktp_number: vendor.ktpNumber,
@@ -791,7 +802,6 @@ export const vendorsAPI = {
             bank_account_doc_link: vendor.bankAccountDocLink,
             legal_doc_link: vendor.legalDocLink,
 
-            // Extra Legal (Mapped for consistency, even if columns missing in basic schema, Supabase handles it if added)
             sppkp_number: vendor.sppkpNumber,
             sppkp_file_link: vendor.sppkpFileLink,
             deed_number: vendor.deedNumber,
@@ -904,15 +914,14 @@ export const itemsAPI = {
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
       categoryId: i.category_id,
-      uom: i.uom,
+      // UoM Removed
       isActive: i.is_active,
       description: i.description,
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
-      // Requirement 6: New Fields
-      weightage: i.weight, // Mapping 'weight' column
-      physicalSpec: i.physical_spec, // Mapping hypothetical 'physical_spec' or description
+      weightage: i.weight,
+      physicalSpec: i.physical_spec,
     }));
   },
 
@@ -926,15 +935,14 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           category_id: item.categoryId,
-          uom: item.uom,
+          // UoM Removed
           is_active: item.isActive,
           description: item.description,
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
-          // Sync new fields
-          weight: item.weightage, // Using 'weight' as DB column
-          physical_spec: item.physicalSpec, // Using 'physical_spec' as DB column (or map to details)
+          weight: item.weightage,
+          physical_spec: item.physicalSpec,
         },
         { onConflict: "code" },
       )
@@ -949,7 +957,6 @@ export const itemsAPI = {
       brandName: data.brand_name,
       itemCategory: data.category,
       categoryId: data.category_id,
-      uom: data.uom,
       isActive: data.is_active,
       description: data.description,
       photos: data.photos || [],
@@ -994,7 +1001,7 @@ export const itemsAPI = {
 };
 
 export const itemCategoriesAPI = {
-  getAll: async () => {
+  getAll: async (): Promise<ItemCategory[]> => {
     const { data, error } = await supabase
       .from("item_categories")
       .select(`*, items:master_items(count)`);
@@ -1003,25 +1010,28 @@ export const itemCategoriesAPI = {
 
     return data.map((cat: any) => ({
       ...cat,
-      isActive: cat.is_active ?? true,
       itemCount: cat.items?.[0]?.count || 0,
     }));
   },
-
   save: async (name: string) => {
     const { data, error } = await supabase
       .from("item_categories")
-      .upsert({ name, is_active: true }, { onConflict: "name" })
+      .upsert({ name }, { onConflict: "name" })
       .select()
       .single();
+
     if (error) throw error;
     return data;
   },
+  delete: async (id: string) => {
+    await supabase
+      .from("master_items")
+      .update({ category_id: null })
+      .eq("category_id", id);
 
-  toggleStatus: async (id: string, isActive: boolean) => {
     const { error } = await supabase
       .from("item_categories")
-      .update({ is_active: isActive })
+      .delete()
       .eq("id", id);
 
     if (error) throw error;
@@ -1029,23 +1039,23 @@ export const itemCategoriesAPI = {
 };
 
 export const paymentMethodsAPI = {
-  getAll: async () => {
+  getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
       .from("payment_methods")
       .select("*")
       .order("name");
     if (error) return [];
-    return data.map((pm: any) => ({
+    return data.map((pm) => ({
       id: pm.id,
       name: pm.name,
       isActive: pm.is_active,
     }));
   },
-  save: async (paymentMethods: any[]) => {
+  save: async (paymentMethods: any[]): Promise<any[]> => {
     const { error } = await supabase
       .from("payment_methods")
       .upsert(
-        paymentMethods.map((pm: any) => ({
+        paymentMethods.map((pm) => ({
           name: pm.name,
           is_active: pm.isActive,
         })),
@@ -1085,6 +1095,7 @@ export const initializeDatabase = async (data: {
             name: item.itemName,
             brand_name: item.brandName,
             category: item.itemCategory,
+            // UoM Removed
             is_active: item.isActive,
             commodity_code: item.commodityCode,
             commodity_name: item.commodityName,
@@ -1111,6 +1122,7 @@ export const initializeDatabase = async (data: {
         payment_methods: v.paymentMethods,
         ppn_percentage: v.ppnPercentage,
         is_active: v.isActive,
+        // vendor_type: v.vendorType, // Removed
         nib_number: v.nibNumber,
         npwpd_number: v.npwpNumber,
       }));
@@ -1200,6 +1212,7 @@ export const initializeDatabase = async (data: {
               status: item.status,
               item_status: item.itemStatus,
               quantity: item.quantity,
+              // UoM Removed
               assigned_vendor_id: vendorId,
               payment_terms: item.paymentTerms,
               unit_price: item.unitPrice,
@@ -1207,7 +1220,7 @@ export const initializeDatabase = async (data: {
               tax_amount: item.taxAmount,
               total_price: item.totalPrice,
               po_number: item.poNumber,
-              po_date: item.po_date
+              po_date: item.poDate
                 ? new Date(item.poDate)
                 : null,
               estimated_delivery_start:
