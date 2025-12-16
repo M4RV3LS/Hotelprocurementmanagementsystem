@@ -18,63 +18,8 @@ export interface DeliveryProof {
 export interface ItemCategory {
   id: string;
   name: string;
-  isActive: boolean;
   itemCount?: number;
 }
-
-// --- REQUIRED FOR VENDOR FORM ---
-export const PAYMENT_METHODS_LIST = [
-  "Bank Transfer",
-  "Cash",
-  "Cheque",
-  "Credit Card",
-  "Virtual Account",
-  "Term of Payment (TOP)",
-];
-
-export const INDONESIA_REGIONS = [
-  "DKI Jakarta",
-  "Jawa Barat",
-  "Jawa Tengah",
-  "Jawa Timur",
-  "Banten",
-  "DI Yogyakarta",
-  "Bali",
-  "Sumatera Utara",
-  "Sumatera Barat",
-  "Sumatera Selatan",
-  "Riau",
-  "Kepulauan Riau",
-  "Jambi",
-  "Bengkulu",
-  "Lampung",
-  "Kepulauan Bangka Belitung",
-  "Aceh",
-  "Nusa Tenggara Barat",
-  "Nusa Tenggara Timur",
-  "Kalimantan Barat",
-  "Kalimantan Tengah",
-  "Kalimantan Selatan",
-  "Kalimantan Timur",
-  "Kalimantan Utara",
-  "Sulawesi Utara",
-  "Sulawesi Tengah",
-  "Sulawesi Selatan",
-  "Sulawesi Tenggara",
-  "Gorontalo",
-  "Sulawesi Barat",
-  "Maluku",
-  "Maluku Utara",
-  "Papua",
-  "Papua Barat",
-];
-
-export const PROPERTY_TYPES = [
-  "Leasing",
-  "Franchise",
-  "Management",
-];
-// --------------------------------
 
 export const COMMODITIES_LIST = [
   { code: "1001", name: "Textiles & Fabrics" },
@@ -135,8 +80,6 @@ export type PaymentTerms =
   | "Payment Terms"
   | string;
 
-export type ItemType = "Product" | "Service";
-
 export interface ProcurementItem {
   id: string;
   prNumber: string;
@@ -150,6 +93,7 @@ export interface ProcurementItem {
   commodityName?: string;
   selectedProperties: Record<string, string>;
   quantity: number;
+  // Removed uom
   region: string;
   itemStatus: ItemStatus;
   status: ProcurementStatus;
@@ -176,25 +120,6 @@ export interface ProcurementItem {
   propertyAddress?: string;
   brandName?: string;
   picName?: string;
-}
-
-export interface Item {
-  itemCode: string;
-  itemName: string;
-  brandName: string;
-  itemCategory: string;
-  categoryId?: string;
-  isActive: boolean;
-  description?: string;
-  photos?: string[];
-  commodityCode?: string;
-  commodityName?: string;
-  itemType: ItemType;
-  weightage?: number;
-  length?: number;
-  width?: number;
-  height?: number;
-  weight?: number;
 }
 
 export interface ProcurementRequest {
@@ -236,4 +161,20 @@ export interface PurchaseOrder {
   items: ProcurementItem[];
   prNumbers: string[];
   deliveryProofs?: DeliveryProof[];
+}
+
+export interface Item {
+  itemCode: string;
+  itemName: string;
+  brandName: string;
+  itemCategory: string;
+  categoryId?: string;
+  // Removed uom
+  isActive: boolean;
+  description?: string;
+  photos?: string[];
+  commodityCode?: string;
+  commodityName?: string;
+  weightage?: string;
+  physicalSpec?: string;
 }

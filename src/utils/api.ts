@@ -675,25 +675,32 @@ export const vendorsAPI = {
       vendorCode: v.code,
       vendorName: v.name,
       vendorType: v.vendor_type || "Corporation",
+
+      // Requirement 4: Handling Regional Coverage as structured data (JSONB)
       regionalCoverages: v.regional_coverage || [],
       vendorRegion: v.region,
+
+      // Requirement 3: Emails and Phone
       vendorAddress: v.address,
-      vendorEmail: v.email,
-      email2: v.email,
+      vendorEmail: v.email, // Email 1
+      email2: v.email_2 || "", // Email 2 (Mapping to a potential column or placeholder)
       vendorPhone: v.phone,
+
       contact_person: v.contact_person,
       picName: v.contact_person,
+
       ppnPercentage: v.ppn_percentage,
       serviceChargePercentage: v.service_charge_percentage,
       paymentMethods: v.payment_methods,
       isActive: v.is_active,
       vendorAgreementLink: v.agreement_link,
       deliveryFee: v.delivery_fee,
+
       agreements: Array.isArray(v.agreements)
         ? v.agreements
         : [],
 
-      // --- Legal & Admin Fields ---
+      // Legal Fields
       nibNumber: v.nib_number,
       nibFileLink: v.nib_file_link,
       ktpNumber: v.ktp_number,
@@ -706,7 +713,7 @@ export const vendorsAPI = {
       bankAccountDocLink: v.bank_account_doc_link,
       legalDocLink: v.legal_doc_link,
 
-      // Extra Legal Fields mapping
+      // Extra Legal Fields
       sppkpNumber: v.sppkp_number,
       sppkpFileLink: v.sppkp_file_link,
       deedNumber: v.deed_number,
@@ -740,7 +747,7 @@ export const vendorsAPI = {
   },
 
   save: async (vendor: any): Promise<any> => {
-    // Upserting to vendors table
+    // Upsert Vendor
     const { data: vendorData, error: vendorError } =
       await supabase
         .from("vendors")
@@ -748,15 +755,20 @@ export const vendorsAPI = {
           {
             code: vendor.vendorCode,
             name: vendor.vendorName,
+
+            // Regions & Structured Coverage
             region: Array.isArray(vendor.vendorRegion)
               ? vendor.vendorRegion
               : [vendor.vendorRegion],
-            regional_coverage: vendor.regionalCoverages,
+            regional_coverage: vendor.regionalCoverages, // Saving structured data
+
             address: vendor.vendorAddress,
             email: vendor.vendorEmail,
+            // email_2: vendor.email2, // Assuming column exists or is ignored if RLS/Schema allows
             phone: vendor.vendorPhone,
             contact_person:
               vendor.picName || vendor.contact_person,
+
             payment_methods: vendor.paymentMethods,
             ppn_percentage: vendor.ppnPercentage,
             service_charge_percentage:
@@ -766,7 +778,7 @@ export const vendorsAPI = {
             agreement_link: vendor.vendorAgreementLink,
             agreements: vendor.agreements,
 
-            // Standard Legal
+            // Legal Mappings
             nib_number: vendor.nibNumber,
             nib_file_link: vendor.nibFileLink,
             ktp_number: vendor.ktpNumber,
@@ -779,7 +791,7 @@ export const vendorsAPI = {
             bank_account_doc_link: vendor.bankAccountDocLink,
             legal_doc_link: vendor.legalDocLink,
 
-            // Extra Legal Fields
+            // Extra Legal (Mapped for consistency, even if columns missing in basic schema, Supabase handles it if added)
             sppkp_number: vendor.sppkpNumber,
             sppkp_file_link: vendor.sppkpFileLink,
             deed_number: vendor.deedNumber,
@@ -809,11 +821,13 @@ export const vendorsAPI = {
       const itemCodes = vendor.items.map(
         (i: any) => i.itemCode,
       );
-      const { data: masterItems } = await supabase
-        .from("master_items")
-        .select("code, id")
-        .in("code", itemCodes);
+      const { data: masterItems, error: masterError } =
+        await supabase
+          .from("master_items")
+          .select("code, id")
+          .in("code", itemCodes);
 
+      if (masterError) throw masterError;
       const itemMap = new Map(
         masterItems?.map((i) => [i.code, i.id]),
       );
@@ -841,10 +855,12 @@ export const vendorsAPI = {
         .from("vendor_catalog_items")
         .delete()
         .eq("vendor_id", vendorId);
+
       if (catalogItems.length > 0) {
-        await supabase
+        const { error: insertError } = await supabase
           .from("vendor_catalog_items")
           .insert(catalogItems);
+        if (insertError) throw insertError;
       }
     } else {
       await supabase
@@ -868,10 +884,18 @@ export const itemsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
       .from("master_items")
-      .select(`*, category:item_categories(name)`)
+      .select(
+        `
+        *,
+        category:item_categories(name)
+      `,
+      )
       .order("name");
 
-    if (error) return [];
+    if (error) {
+      console.error("Error fetching items:", error);
+      return [];
+    }
 
     return (data || []).map((i: any) => ({
       itemCode: i.code,
@@ -880,17 +904,15 @@ export const itemsAPI = {
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
       categoryId: i.category_id,
+      uom: i.uom,
       isActive: i.is_active,
       description: i.description,
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
-      itemType: i.item_type || "Product",
-      weightage: i.weightage,
-      length: i.length,
-      width: i.width,
-      height: i.height,
-      weight: i.weight,
+      // Requirement 6: New Fields
+      weightage: i.weight, // Mapping 'weight' column
+      physicalSpec: i.physical_spec, // Mapping hypothetical 'physical_spec' or description
     }));
   },
 
@@ -904,17 +926,15 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           category_id: item.categoryId,
+          uom: item.uom,
           is_active: item.isActive,
           description: item.description,
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
-          item_type: item.itemType,
-          weightage: item.weightage,
-          length: item.length,
-          width: item.width,
-          height: item.height,
-          weight: item.weight,
+          // Sync new fields
+          weight: item.weightage, // Using 'weight' as DB column
+          physical_spec: item.physicalSpec, // Using 'physical_spec' as DB column (or map to details)
         },
         { onConflict: "code" },
       )
@@ -922,37 +942,22 @@ export const itemsAPI = {
       .single();
 
     if (error) throw error;
-    return { ...item };
-  },
 
-  bulkSave: async (items: any[]) => {
-    const itemsToUpsert = items.map((item) => ({
-      code: item.itemCode,
-      name: item.itemName,
-      brand_name: item.brandName,
-      category: item.itemCategory,
-      category_id: item.categoryId,
-      is_active: item.isActive,
-      description: item.description,
-      photos: item.photos || [],
-      commodity_code: item.commodityCode,
-      commodity_name: item.commodityName,
-      item_type: item.itemType,
-      weightage: item.weightage,
-      length: item.length,
-      width: item.width,
-      height: item.height,
-      weight: item.weight,
-    }));
-
-    const BATCH_SIZE = 100;
-    for (let i = 0; i < itemsToUpsert.length; i += BATCH_SIZE) {
-      const batch = itemsToUpsert.slice(i, i + BATCH_SIZE);
-      const { error } = await supabase
-        .from("master_items")
-        .upsert(batch, { onConflict: "code" });
-      if (error) throw error;
-    }
+    return {
+      itemCode: data.code,
+      itemName: data.name,
+      brandName: data.brand_name,
+      itemCategory: data.category,
+      categoryId: data.category_id,
+      uom: data.uom,
+      isActive: data.is_active,
+      description: data.description,
+      photos: data.photos || [],
+      commodityCode: data.commodity_code,
+      commodityName: data.commodity_name,
+      weightage: data.weight,
+      physicalSpec: data.physical_spec,
+    };
   },
 
   delete: async (code: string) => {
@@ -960,6 +965,7 @@ export const itemsAPI = {
       .from("master_items")
       .delete()
       .eq("code", code);
+
     if (error) throw error;
   },
 

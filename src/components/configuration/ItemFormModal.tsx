@@ -1,11 +1,22 @@
 import { useState, useEffect } from "react";
-import { X, Image as ImageIcon } from "lucide-react";
+import { X, Image as ImageIcon, Check, ChevronsUpDown } from "lucide-react";
 import { itemCategoriesAPI } from "../../utils/api";
-import type { Item } from "./ItemConfiguration";
+import type { Item } from "../../data/mockData";
+import { BRAND_NAMES, COMMODITIES_LIST } from "../../data/mockData";
+import { cn } from "../ui/utils";
 import {
-  BRAND_NAMES,
-  COMMODITIES_LIST,
-} from "../../data/mockData";
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "../ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../ui/popover";
 
 interface ItemFormModalProps {
   item: Item | null;
@@ -20,44 +31,29 @@ export default function ItemFormModal({
 }: ItemFormModalProps) {
   const [formData, setFormData] = useState<any>(
     item || {
-      itemCode: "", // Auto-generated
+      itemCode: "",
       itemName: "",
       brandName: "",
       itemCategory: "",
       categoryId: "",
-      uom: "Unit", // Requirement 1: Default to "Unit" to satisfy DB constraint since field is hidden
+      // Removed uom
       description: "",
       photos: [],
       isActive: true,
       commodityCode: "",
       commodityName: "",
-      itemType: "Product",
-      weightage: 0,
-      length: 0,
-      width: 0,
-      height: 0,
-      weight: 0,
+      weightage: "", 
+      physicalSpec: "",
     },
   );
 
   const [categories, setCategories] = useState<any[]>([]);
+  const [openBrand, setOpenBrand] = useState(false);
+  const [openCommodity, setOpenCommodity] = useState(false);
 
   useEffect(() => {
     itemCategoriesAPI.getAll().then(setCategories);
-
-    // Auto-generate code if new
-    if (!item) {
-      const timestamp = Date.now().toString().slice(-6);
-      const random = Math.floor(Math.random() * 1000)
-        .toString()
-        .padStart(3, "0");
-      const autoCode = `ITM-${timestamp}${random}`;
-      setFormData((prev: any) => ({
-        ...prev,
-        itemCode: autoCode,
-      }));
-    }
-  }, [item]);
+  }, []);
 
   const handlePhotoUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -86,6 +82,17 @@ export default function ItemFormModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.itemCode) return alert("Item Code is required");
+    if (!formData.itemName) return alert("Item Name is required");
+    if (!formData.brandName) return alert("Brand Name is required");
+    if (!formData.commodityName) return alert("Commodity is required");
+    if (!formData.categoryId) return alert("Item Category is required");
+    // Removed UoM check
+    if (!formData.weightage) return alert("Weightage is required");
+    if (!formData.physicalSpec) return alert("Physical Specification is required");
+    if (!formData.photos || formData.photos.length === 0) return alert("Item Photos are required");
+
     onSave(formData);
   };
 
@@ -97,7 +104,7 @@ export default function ItemFormModal({
       />
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
             <h3 className="text-gray-900">
               {item ? "Edit Item" : "Add New Item"}
             </h3>
@@ -109,165 +116,151 @@ export default function ItemFormModal({
             </button>
           </div>
 
-          <form
-            onSubmit={handleSubmit}
-            className="p-6 space-y-6"
-          >
-            {/* Item Type Selection */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <label className="block text-gray-700 font-medium mb-3">
-                Item Type{" "}
-                <span className="text-red-500">*</span>
-              </label>
-              <div className="flex gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="itemType"
-                    value="Product"
-                    checked={formData.itemType === "Product"}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "itemType",
-                        e.target.value,
-                      )
-                    }
-                    className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224]"
-                  />
-                  <span className="text-gray-900">
-                    Physical Product
-                  </span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="itemType"
-                    value="Service"
-                    checked={formData.itemType === "Service"}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "itemType",
-                        e.target.value,
-                      )
-                    }
-                    className="w-4 h-4 text-[#ec2224] focus:ring-[#ec2224]"
-                  />
-                  <span className="text-gray-900">Service</span>
-                </label>
-              </div>
-            </div>
-
+          <form onSubmit={handleSubmit} className="p-6 space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Item Code{" "}
-                  <span className="text-gray-400 text-xs">
-                    (Auto-generated)
-                  </span>
+                  Item Code <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
+                  required
                   value={formData.itemCode}
-                  disabled
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-500 cursor-not-allowed"
+                  onChange={(e) =>
+                    handleInputChange("itemCode", e.target.value)
+                  }
+                  disabled={!!item}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224] disabled:bg-gray-100"
                 />
               </div>
 
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Item Name{" "}
-                  <span className="text-red-500">*</span>
+                  Item Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
                   value={formData.itemName}
                   onChange={(e) =>
-                    handleInputChange(
-                      "itemName",
-                      e.target.value,
-                    )
+                    handleInputChange("itemName", e.target.value)
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                 />
               </div>
 
-              {/* Weightage Field */}
-              <div>
+              {/* Brand Name Input */}
+              <div className="flex flex-col">
                 <label className="block text-gray-700 mb-2">
-                  Weightage
+                  Brand Name <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.weightage || ""}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "weightage",
-                      parseFloat(e.target.value),
-                    )
-                  }
-                  placeholder="e.g. 1.0"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                />
+                <Popover open={openBrand} onOpenChange={setOpenBrand}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={openBrand}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg flex justify-between items-center bg-white"
+                    >
+                      {formData.brandName
+                        ? formData.brandName
+                        : "Select Brand..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search brand..." />
+                      <CommandList>
+                        <CommandEmpty>No brand found.</CommandEmpty>
+                        <CommandGroup>
+                          {BRAND_NAMES.map((brand) => (
+                            <CommandItem
+                              key={brand}
+                              value={brand}
+                              onSelect={(currentValue) => {
+                                handleInputChange("brandName", currentValue === formData.brandName ? "" : currentValue);
+                                setOpenBrand(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.brandName === brand ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {brand}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Commodities Name Input */}
+              <div className="flex flex-col">
+                <label className="block text-gray-700 mb-2">
+                  Commodities Name <span className="text-red-500">*</span>
+                </label>
+                <Popover open={openCommodity} onOpenChange={setOpenCommodity}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      role="combobox"
+                      aria-expanded={openCommodity}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg flex justify-between items-center bg-white"
+                    >
+                      {formData.commodityName
+                        ? formData.commodityName
+                        : "Select Commodity..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[300px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search commodity..." />
+                      <CommandList>
+                        <CommandEmpty>No commodity found.</CommandEmpty>
+                        <CommandGroup>
+                          {COMMODITIES_LIST.map((c) => (
+                            <CommandItem
+                              key={c.code}
+                              value={c.name}
+                              onSelect={(currentValue) => {
+                                const selected = COMMODITIES_LIST.find(
+                                  item => item.name.toLowerCase() === currentValue.toLowerCase()
+                                );
+                                if (selected) {
+                                    setFormData((prev: any) => ({
+                                        ...prev,
+                                        commodityCode: selected.code,
+                                        commodityName: selected.name
+                                    }));
+                                }
+                                setOpenCommodity(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.commodityName === c.name ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              {c.name}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Brand Name
-                </label>
-                <select
-                  value={formData.brandName}
-                  onChange={(e) =>
-                    handleInputChange(
-                      "brandName",
-                      e.target.value,
-                    )
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                >
-                  <option value="">Select Brand</option>
-                  {BRAND_NAMES.map((brand) => (
-                    <option key={brand} value={brand}>
-                      {brand}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Commodities wrapped in conditional check */}
-              {formData.itemType === "Product" && (
-                <div>
-                  <label className="block text-gray-700 mb-2">
-                    Commodities Name
-                  </label>
-                  <select
-                    value={formData.commodityCode}
-                    onChange={(e) => {
-                      const selected = COMMODITIES_LIST.find(
-                        (c) => c.code === e.target.value,
-                      );
-                      setFormData({
-                        ...formData,
-                        commodityCode: selected?.code || "",
-                        commodityName: selected?.name || "",
-                      });
-                    }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
-                  >
-                    <option value="">Select Commodity</option>
-                    {COMMODITIES_LIST.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.code} - {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-gray-700 mb-2">
-                  Item Category
+                  Item Category <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.categoryId || ""}
@@ -278,9 +271,7 @@ export default function ItemFormModal({
                     setFormData({
                       ...formData,
                       categoryId: e.target.value,
-                      itemCategory: cat
-                        ? cat.name
-                        : "Uncategorized",
+                      itemCategory: cat ? cat.name : "Uncategorized",
                     });
                   }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
@@ -294,99 +285,48 @@ export default function ItemFormModal({
                 </select>
               </div>
 
-              {/* Requirement 1: UoM Field Removed */}
-            </div>
+              {/* Removed UoM Input Field */}
 
-            {/* Dimensions & Weight (Only for Physical Products) */}
-            {formData.itemType === "Product" && (
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3 text-sm">
-                  Physical Specifications
-                </h4>
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Length (cm)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.length}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "length",
-                          parseFloat(e.target.value),
-                        )
-                      }
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Width (cm)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.width}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "width",
-                          parseFloat(e.target.value),
-                        )
-                      }
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Height (cm)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.height}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "height",
-                          parseFloat(e.target.value),
-                        )
-                      }
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Weight (kg)
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.weight}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "weight",
-                          parseFloat(e.target.value),
-                        )
-                      }
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="block text-gray-700 mb-2">
+                  Weightage (kg) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  required
+                  value={formData.weightage}
+                  onChange={(e) =>
+                    handleInputChange("weightage", e.target.value)
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                />
               </div>
-            )}
+            </div>
 
             <div>
               <label className="block text-gray-700 mb-2">
-                Description
+                Physical Specification <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                required
+                value={formData.physicalSpec || ""}
+                onChange={(e) =>
+                  handleInputChange("physicalSpec", e.target.value)
+                }
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg h-24 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
+                placeholder="Dimensions, Material, etc."
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 mb-2">
+                Description <span className="text-gray-400 font-normal">(Optional)</span>
               </label>
               <textarea
                 value={formData.description || ""}
                 onChange={(e) =>
-                  handleInputChange(
-                    "description",
-                    e.target.value,
-                  )
+                  handleInputChange("description", e.target.value)
                 }
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg h-24 focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                 placeholder="Enter item description..."
@@ -395,7 +335,7 @@ export default function ItemFormModal({
 
             <div>
               <label className="block text-gray-700 mb-2">
-                Item Photos
+                Item Photos <span className="text-red-500">*</span>
               </label>
               <div className="flex flex-wrap gap-4">
                 {(formData.photos || []).map(
