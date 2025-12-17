@@ -132,6 +132,7 @@ export const procurementRequestsAPI = {
             item.master_items?.category || "Ops Item",
           selectedProperties: {},
           quantity: item.quantity,
+          // UoM Removed
           region: region,
           itemStatus: item.item_status || "Not Set",
           status: item.status,
@@ -227,6 +228,7 @@ export const procurementRequestsAPI = {
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
+      // UoM Removed
       assigned_vendor_id: item.vendorCode
         ? vendorMap.get(item.vendorCode)
         : null,
@@ -328,6 +330,7 @@ export const purchaseOrdersAPI = {
         request_id: i.request_id,
         itemName: i.master_items?.name || i.item_name_snapshot,
         quantity: i.quantity,
+        // UoM Removed
         unitPrice: i.unit_price,
         totalPrice: i.total_price,
         status: i.status,
@@ -764,6 +767,7 @@ export const vendorsAPI = {
           {
             code: vendor.vendorCode,
             name: vendor.vendorName,
+            // vendor_type: vendor.vendorType, // Removed to avoid Schema Error PGRST204
 
             region: Array.isArray(vendor.vendorRegion)
               ? vendor.vendorRegion
@@ -772,7 +776,7 @@ export const vendorsAPI = {
 
             address: vendor.vendorAddress,
             email: vendor.vendorEmail,
-            // email_2: vendor.email2, // Assuming extra column if needed
+            // email_2: vendor.email2,
             phone: vendor.vendorPhone,
             contact_person:
               vendor.picName || vendor.contact_person,
@@ -910,11 +914,13 @@ export const itemsAPI = {
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
       categoryId: i.category_id,
+      // UoM Removed
       isActive: i.is_active,
       description: i.description,
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
+      itemType: i.item_type || "Product",
       weightage: i.weight,
       physicalSpec: i.physical_spec,
     }));
@@ -930,11 +936,14 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           category_id: item.categoryId,
+          // UoM Removed
           is_active: item.isActive,
           description: item.description,
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
+          // Ensure Type and Weight are saved
+          item_type: item.itemType,
           weight: item.weightage,
           physical_spec: item.physicalSpec,
         },
@@ -956,6 +965,7 @@ export const itemsAPI = {
       photos: data.photos || [],
       commodityCode: data.commodity_code,
       commodityName: data.commodity_name,
+      itemType: data.item_type,
       weightage: data.weight,
       physicalSpec: data.physical_spec,
     };
@@ -999,27 +1009,44 @@ export const itemCategoriesAPI = {
     const { data, error } = await supabase
       .from("item_categories")
       .select(`*, items:master_items(count)`)
-      .order("name"); // Added order
+      .order("name"); // Ordered alphabetically
 
     if (error) throw error;
 
     return data.map((cat: any) => ({
       id: cat.id,
       name: cat.name,
+      isActive: cat.is_active, // FIXED: Explicitly map DB column 'is_active' to frontend prop 'isActive'
       itemCount: cat.items?.[0]?.count || 0,
-      isActive: cat.is_active ?? true, // Added isActive
     }));
   },
+
   save: async (name: string) => {
     const { data, error } = await supabase
       .from("item_categories")
-      .upsert({ name, is_active: true }, { onConflict: "name" }) // Added is_active
+      .upsert({ name }, { onConflict: "name" })
       .select()
       .single();
 
     if (error) throw error;
-    return data;
+
+    // Return mapped object
+    return {
+      ...data,
+      isActive: data.is_active,
+    };
   },
+
+  // FIXED: Added missing toggleStatus function causing the TypeError
+  toggleStatus: async (id: string, isActive: boolean) => {
+    const { error } = await supabase
+      .from("item_categories")
+      .update({ is_active: isActive })
+      .eq("id", id);
+
+    if (error) throw error;
+  },
+
   delete: async (id: string) => {
     await supabase
       .from("master_items")
@@ -1031,14 +1058,6 @@ export const itemCategoriesAPI = {
       .delete()
       .eq("id", id);
 
-    if (error) throw error;
-  },
-  // Added the missing method:
-  toggleStatus: async (id: string, isActive: boolean) => {
-    const { error } = await supabase
-      .from("item_categories")
-      .update({ is_active: isActive })
-      .eq("id", id);
     if (error) throw error;
   },
 };
@@ -1100,6 +1119,7 @@ export const initializeDatabase = async (data: {
             name: item.itemName,
             brand_name: item.brandName,
             category: item.itemCategory,
+            // UoM Removed
             is_active: item.isActive,
             commodity_code: item.commodityCode,
             commodity_name: item.commodityName,
@@ -1126,6 +1146,7 @@ export const initializeDatabase = async (data: {
         payment_methods: v.paymentMethods,
         ppn_percentage: v.ppnPercentage,
         is_active: v.isActive,
+        // vendor_type: v.vendorType, // Removed
         nib_number: v.nibNumber,
         npwpd_number: v.npwpNumber,
       }));
@@ -1215,6 +1236,7 @@ export const initializeDatabase = async (data: {
               status: item.status,
               item_status: item.itemStatus,
               quantity: item.quantity,
+              // UoM Removed
               assigned_vendor_id: vendorId,
               payment_terms: item.paymentTerms,
               unit_price: item.unitPrice,
@@ -1222,7 +1244,7 @@ export const initializeDatabase = async (data: {
               tax_amount: item.taxAmount,
               total_price: item.totalPrice,
               po_number: item.poNumber,
-              po_date: item.po_date
+              po_date: item.poDate
                 ? new Date(item.poDate)
                 : null,
               estimated_delivery_start:

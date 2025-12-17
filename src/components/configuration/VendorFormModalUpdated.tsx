@@ -10,8 +10,6 @@ import {
 } from "lucide-react";
 import type { Vendor } from "./VendorManagement";
 
-// ... (Rest of interfaces kept same for brevity, showing modification below)
-
 // --- Interfaces ---
 
 interface Agreement {
@@ -558,6 +556,13 @@ export default function VendorFormModalUpdated({
                 <ReadOnlyField
                   label="PB1 (%)"
                   value={formData.pb1Percentage}
+                />
+                {/* Requirement #1: Added Payment Method Field */}
+                <ReadOnlyField
+                  label="Payment Method"
+                  value={
+                    formData.paymentMethods?.join(", ") || "-"
+                  }
                 />
               </div>
             </section>
