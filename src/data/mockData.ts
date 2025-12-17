@@ -18,8 +18,8 @@ export interface DeliveryProof {
 export interface ItemCategory {
   id: string;
   name: string;
-  isActive: boolean;
   itemCount?: number;
+  isActive?: boolean; // Added field
 }
 
 export const COMMODITIES_LIST = [
@@ -81,8 +81,6 @@ export type PaymentTerms =
   | "Payment Terms"
   | string;
 
-export type ItemType = "Product" | "Service";
-
 export interface ProcurementItem {
   id: string;
   prNumber: string;
@@ -124,25 +122,6 @@ export interface ProcurementItem {
   picName?: string;
 }
 
-export interface Item {
-  itemCode: string;
-  itemName: string;
-  brandName: string;
-  itemCategory: string;
-  categoryId?: string;
-  isActive: boolean;
-  description?: string;
-  photos?: string[];
-  commodityCode?: string;
-  commodityName?: string;
-  itemType: ItemType;
-  weightage?: number;
-  length?: number;
-  width?: number;
-  height?: number;
-  weight?: number;
-}
-
 export interface ProcurementRequest {
   prNumber: string;
   prDate: string;
@@ -182,4 +161,19 @@ export interface PurchaseOrder {
   items: ProcurementItem[];
   prNumbers: string[];
   deliveryProofs?: DeliveryProof[];
+}
+
+export interface Item {
+  itemCode: string;
+  itemName: string;
+  brandName: string;
+  itemCategory: string;
+  categoryId?: string;
+  isActive: boolean;
+  description?: string;
+  photos?: string[];
+  commodityCode?: string;
+  commodityName?: string;
+  weightage?: string;
+  physicalSpec?: string;
 }
