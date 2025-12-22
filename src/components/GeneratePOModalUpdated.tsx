@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { X, ChevronRight, Download } from "lucide-react";
 import {
   type ProcurementRequest,
   type ProcurementItem,
 } from "../data/mockData";
 import MultiSelectDropdown from "./configuration/MultiSelectDropdown";
+import { purchaseOrdersAPI } from "../utils/api";
 
 interface GeneratePOModalProps {
   onClose: () => void;
@@ -13,7 +14,21 @@ interface GeneratePOModalProps {
   requests: ProcurementRequest[];
 }
 
-// Requirement 2: Expanded PO Data interface for calculations
+// Requirement 2: Allowed Brand List
+const ALLOWED_BRANDS = [
+  "Reddoorz",
+  "Reddoorz Premium",
+  "RedLiving",
+  "Sans",
+  "Sans Vibe",
+  "Sans Stay",
+  "Sans Elite",
+  "Urban View",
+  "The Lavana",
+  "No Branding",
+  "Vibes by SANS",
+];
+
 interface POData {
   poNumber: string;
   poDate: string;
@@ -23,21 +38,31 @@ interface POData {
   vendorAddress: string;
   vendorPIC: string;
   ppnPercentage: number;
-  serviceChargePercentage: number; // Added
+  serviceChargePercentage: number;
+  pb1Percentage: number;
+  legalEntity: "CSI" | "RMI"; // Added for PO Generation
+  agreementNumber: string;
+  agreementDate: string;
+  quotationNumber: string;
+  quotationDate: string;
+  note: string;
   items: Array<{
+    id: string;
     prNumber: string;
+    itemCode: string;
     itemName: string;
-    brandItem: string; // Added: Item Brand
-    brandProperty: string; // Added: Property Brand
+    brandItem: string;
+    brandProperty: string;
     quantity: number;
     uom: string;
     unitPrice: number;
     whtPercentage: number;
     pic: string;
-    region: string; // Used for City
-    propertyCode: string; // Added
-    propertyName: string; // Added
-    propertyAddress: string; // Added
+    picNumber: string;
+    region: string;
+    propertyCode: string;
+    propertyName: string;
+    propertyAddress: string;
     item: ProcurementItem;
     status: "Ready" | "Not Ready";
   }>;
@@ -65,13 +90,87 @@ export default function GeneratePOModalUpdated({
 
   // Preview state
   const [poData, setPOData] = useState<POData | null>(null);
+  const [existingPONumbers, setExistingPONumbers] = useState<
+    string[]
+  >([]);
 
+  // Fetch existing POs to calculate increment
+  useEffect(() => {
+    purchaseOrdersAPI.getAll().then((pos) => {
+      setExistingPONumbers(pos.map((p) => p.poNumber));
+    });
+  }, []);
+
+  // --- Helper: Roman Numeral Converter for Month ---
+  const getRomanMonth = (date: Date): string => {
+    const months = [
+      "I",
+      "II",
+      "III",
+      "IV",
+      "V",
+      "VI",
+      "VII",
+      "VIII",
+      "IX",
+      "X",
+      "XI",
+      "XII",
+    ];
+    return months[date.getMonth()];
+  };
+
+  // --- Helper: PO Number Generator ---
+  // Format: PO[Year][3 Digit Increment][MonthRoman][ID][Entity]
+  const generatePONumber = (
+    entity: "CSI" | "RMI",
+    dateStr: string,
+  ) => {
+    const date = new Date(dateStr);
+    const year = date.getFullYear();
+    const monthRoman = getRomanMonth(date);
+    const countryCode = "ID"; // Fixed as per requirement
+
+    // Filter existing POs for this Year to find max increment
+    // Regex matches: PO2025(\d{3})...
+    const pattern = new RegExp(`^PO${year}(\\d{3})`);
+
+    let maxIncrement = 0;
+    existingPONumbers.forEach((poNum) => {
+      const match = poNum.match(pattern);
+      if (match) {
+        const inc = parseInt(match[1], 10);
+        if (!isNaN(inc) && inc > maxIncrement) {
+          maxIncrement = inc;
+        }
+      }
+    });
+
+    // Increment logic: Start 001, Reset after 999
+    // If max is 999, we wrap to 001 (based on "reset to 001 after 999 maximum")
+    let nextIncrement = maxIncrement + 1;
+    if (nextIncrement > 999) nextIncrement = 1;
+
+    const incrementStr = nextIncrement
+      .toString()
+      .padStart(3, "0");
+
+    return `PO${year}${incrementStr}${monthRoman}${countryCode}${entity}`;
+  };
+
+  const vendorAgreements = useMemo(() => {
+    const vendor = vendors.find(
+      (v) => v.vendorName === selectedVendor,
+    );
+    return vendor?.agreements || [];
+  }, [vendors, selectedVendor]);
+
+  // ... [Filter Logic remains same] ...
   const getAvailableItems = () => {
     const items: Array<{
       request: ProcurementRequest;
       item: ProcurementItem;
     }> = [];
-
     requests.forEach((request) => {
       request.items.forEach((item) => {
         if (
@@ -129,7 +228,6 @@ export default function GeneratePOModalUpdated({
       selectedRegions.length === 0
     )
       return [];
-
     const availableItems = getAvailableItems();
     const filteredItems = availableItems.filter(
       ({ item, request }) =>
@@ -137,7 +235,6 @@ export default function GeneratePOModalUpdated({
         request.propertyType === selectedPropertyType &&
         selectedRegions.includes(item.region),
     );
-
     const paymentTerms = new Set(
       filteredItems.map(({ item }) => item.paymentTerms),
     );
@@ -175,14 +272,9 @@ export default function GeneratePOModalUpdated({
       return;
     }
 
-    const poNumber = `PO${new Date().getFullYear()}${Math.floor(
-      Math.random() * 10000,
-    )
-      .toString()
-      .padStart(4, "0")}IDR`;
-
-    // Requirement 2a: PO Date Autofilled (Today)
     const poDate = new Date().toISOString().split("T")[0];
+    const defaultEntity = "RMI"; // Default
+    const poNumber = generatePONumber(defaultEntity, poDate);
 
     const vendor = vendors.find(
       (v) => v.vendorName === selectedVendor,
@@ -199,33 +291,43 @@ export default function GeneratePOModalUpdated({
       poNumber,
       poDate,
       eta: "",
-      paymentTerms: selectedPaymentTerms, // Requirement 2b: Autofilled
+      paymentTerms: selectedPaymentTerms,
       vendorName: selectedVendor,
       vendorAddress: vendor?.vendorAddress || "-",
       vendorPIC:
         vendor?.picName || vendor?.contact_person || "-",
       ppnPercentage: vendor?.ppnPercentage || 11,
       serviceChargePercentage:
-        vendor?.serviceChargePercentage || 0, // Requirement 2d
+        vendor?.serviceChargePercentage || 0,
+      pb1Percentage: 0, // Default 0
+      legalEntity: defaultEntity,
+      agreementNumber: "",
+      agreementDate: "",
+      quotationNumber: "",
+      quotationDate: "",
+      note: "",
       items: matchingItems.map(({ request, item }) => ({
+        id: item.id,
         prNumber: request.prNumber,
+        itemCode: item.itemCode,
         itemName: `${item.itemName}`,
         brandItem:
           item.itemCategory === "Branding Item"
             ? request.brandName || "RedDoorz"
-            : "Generic", // Approximate logic for Brand Item
-        brandProperty: request.brandName, // Property Brand
+            : "Generic",
+        brandProperty: request.brandName,
         quantity: item.quantity,
-        uom: item.uom,
+        uom: "Unit",
         unitPrice: item.unitPrice || 0,
         whtPercentage: getItemWHT(item.itemCode),
         pic: request.picName,
+        picNumber: "",
         region: item.region,
         propertyCode: request.propertyCode,
         propertyName: request.propertyName,
         propertyAddress: request.propertyAddress,
         item: item,
-        status: "Ready", // Default to Ready for preview logic
+        status: "Ready",
       })),
     };
 
@@ -233,88 +335,29 @@ export default function GeneratePOModalUpdated({
     setStep("preview");
   };
 
-  const handleExportPO = () => {
-    if (!poData) return;
+  // --- Aggregation Logic for Table 1 ---
+  const aggregatedItems = useMemo(() => {
+    if (!poData) return [];
+    const map = new Map();
 
-    const readyItems = poData.items.filter(
-      (i) => i.status === "Ready",
-    );
-
-    if (readyItems.length === 0) {
-      alert(
-        "No items are marked as 'Ready'. PO cannot be generated.",
-      );
-      return;
-    }
-
-    if (!poData.eta) {
-      alert("Please input Estimated Time Arrival (ETA).");
-      return;
-    }
-
-    import("../utils/api").then(({ purchaseOrdersAPI }) => {
-      const vendorId = vendors.find(
-        (v) => v.vendorName === selectedVendor,
-      )?.id;
-
-      if (!vendorId) {
-        alert(
-          "System Error: Vendor ID not found. Please refresh vendor data.",
-        );
-        return;
-      }
-
-      const poPayload = {
-        poNumber: poData.poNumber,
-        vendorId: vendorId,
-        generatedDate: poData.poDate,
-        totalAmount: readyItems.reduce(
-          (sum, i) => sum + i.unitPrice * i.quantity,
-          0,
-        ),
-        items: readyItems.map((i) => ({
-          id: i.item.id,
-          whtPercentage: i.whtPercentage,
-          eta: poData.eta,
-        })),
-      };
-
-      purchaseOrdersAPI
-        .create(poPayload)
-        .then(() => {
-          alert(
-            `PO ${poData.poNumber} generated successfully with ${readyItems.length} items!`,
-          );
-
-          const readyItemIds = new Set(
-            readyItems.map((i) => i.item.id),
-          );
-
-          const updatedRequests = requests.map((req) => ({
-            ...req,
-            items: req.items.map((item) => {
-              if (readyItemIds.has(item.id)) {
-                return {
-                  ...item,
-                  status: "Waiting PO Approval" as const,
-                  poNumber: poData.poNumber,
-                };
-              }
-              return item;
-            }),
-          }));
-
-          onGenerate(updatedRequests);
-          onClose();
-        })
-        .catch((err) => {
-          console.error(err);
-          alert("Failed to create PO in database.");
+    poData.items.forEach((item) => {
+      const key = item.itemCode;
+      if (!map.has(key)) {
+        map.set(key, {
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          quantity: 0,
+          unitPrice: item.unitPrice,
+          whtPercentage: item.whtPercentage,
         });
+      }
+      const existing = map.get(key);
+      existing.quantity += item.quantity;
     });
-  };
 
-  // Requirement 2d: Calculations
+    return Array.from(map.values());
+  }, [poData?.items]);
+
   const calculateTotals = () => {
     if (!poData)
       return {
@@ -322,6 +365,7 @@ export default function GeneratePOModalUpdated({
         totalAmount: 0,
         ppn: 0,
         sc: 0,
+        pb1: 0,
         grandTotal: 0,
       };
 
@@ -338,19 +382,90 @@ export default function GeneratePOModalUpdated({
       0,
     );
 
-    // Standard Tax Calc: Total + Service Charge + PPN
-    // WHT is usually deducted from payment, so standard Invoice Grand Total = Total + SC + PPN
     const sc =
       totalAmount * (poData.serviceChargePercentage / 100);
-    const taxableAmount = totalAmount + sc;
-    const ppn = taxableAmount * (poData.ppnPercentage / 100);
+    const ppn = totalAmount * (poData.ppnPercentage / 100);
+    const pb1 = totalAmount * (poData.pb1Percentage / 100);
 
-    const grandTotal = totalAmount + sc + ppn;
+    const grandTotal = totalAmount + sc + ppn + pb1;
 
-    return { totalQty, totalAmount, ppn, sc, grandTotal };
+    return { totalQty, totalAmount, ppn, sc, pb1, grandTotal };
   };
 
   const totals = calculateTotals();
+
+  // Handle Entity Change (Recalculate PO Number)
+  const handleEntityChange = (entity: "CSI" | "RMI") => {
+    if (!poData) return;
+    const newPONumber = generatePONumber(entity, poData.poDate);
+    setPOData({
+      ...poData,
+      legalEntity: entity,
+      poNumber: newPONumber,
+    });
+  };
+
+  const handleExportPO = () => {
+    if (!poData) return;
+
+    if (!poData.eta) {
+      alert("Please input Estimated Time Arrival (ETA).");
+      return;
+    }
+
+    import("../utils/api").then(({ purchaseOrdersAPI }) => {
+      const vendorId = vendors.find(
+        (v) => v.vendorName === selectedVendor,
+      )?.id;
+      if (!vendorId) return;
+
+      const readyItems = poData.items.filter(
+        (i) => i.status === "Ready",
+      );
+
+      const poPayload = {
+        poNumber: poData.poNumber,
+        vendorId: vendorId,
+        generatedDate: poData.poDate,
+        totalAmount: totals.grandTotal,
+        items: readyItems.map((i) => ({
+          id: i.item.id,
+          whtPercentage: i.whtPercentage,
+          eta: poData.eta,
+        })),
+      };
+
+      purchaseOrdersAPI
+        .create(poPayload)
+        .then(() => {
+          alert(
+            `PO ${poData.poNumber} generated successfully!`,
+          );
+          const readyItemIds = new Set(
+            readyItems.map((i) => i.item.id),
+          );
+          const updatedRequests = requests.map((req) => ({
+            ...req,
+            items: req.items.map((item) => {
+              if (readyItemIds.has(item.id)) {
+                return {
+                  ...item,
+                  status: "Waiting PO Approval" as const,
+                  poNumber: poData.poNumber,
+                };
+              }
+              return item;
+            }),
+          }));
+          onGenerate(updatedRequests);
+          onClose();
+        })
+        .catch((err) => {
+          console.error(err);
+          alert("Failed to create PO in database.");
+        });
+    });
+  };
 
   const formatCurrency = (val: number) =>
     new Intl.NumberFormat("id-ID", {
@@ -368,7 +483,7 @@ export default function GeneratePOModalUpdated({
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-[95vw] max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-6 flex items-center justify-between z-10">
-            <h2 className="text-gray-900">
+            <h2 className="text-gray-900 font-semibold text-lg">
               Generate Purchase Order
             </h2>
             <button
@@ -381,7 +496,7 @@ export default function GeneratePOModalUpdated({
 
           <div className="px-8 py-6">
             {step === "selection" ? (
-              // ... [Selection Step Code Remains Same] ...
+              // --- SELECTION STEP (Unchanged) ---
               <div className="space-y-6">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p className="text-blue-900 text-sm">
@@ -391,7 +506,6 @@ export default function GeneratePOModalUpdated({
                   </p>
                 </div>
                 <div className="space-y-4">
-                  {/* 1. Vendor */}
                   <div>
                     <label className="block text-gray-700 mb-2">
                       Vendor{" "}
@@ -416,8 +530,6 @@ export default function GeneratePOModalUpdated({
                       ))}
                     </select>
                   </div>
-
-                  {/* 2. Property Type */}
                   <div>
                     <label className="block text-gray-700 mb-2">
                       Property Type{" "}
@@ -450,8 +562,6 @@ export default function GeneratePOModalUpdated({
                       )}
                     </select>
                   </div>
-
-                  {/* 3. Region */}
                   <div>
                     <MultiSelectDropdown
                       options={getAvailableRegions()}
@@ -464,8 +574,6 @@ export default function GeneratePOModalUpdated({
                       placeholder="Select Regions"
                     />
                   </div>
-
-                  {/* 4. Payment Terms */}
                   <div>
                     <label className="block text-gray-700 mb-2">
                       Payment Terms{" "}
@@ -519,61 +627,76 @@ export default function GeneratePOModalUpdated({
                 </div>
               </div>
             ) : (
-              // Requirement 2: Preview Mode Updates
-              <div className="space-y-6">
-                <div className="bg-gray-50 rounded-lg p-6">
-                  {/* Header details */}
-                  <h3 className="text-gray-900 font-medium mb-4 border-b pb-2">
-                    PO Header Details
+              // --- PREVIEW STEP (Updated) ---
+              <div className="space-y-8">
+                {/* Header Information */}
+                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                  <h3 className="text-gray-900 font-medium mb-4 border-b border-gray-200 pb-2">
+                    Vendor Information
                   </h3>
                   <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                     <div>
-                      <span className="text-sm text-gray-500 block">
-                        PO Number
-                      </span>
-                      <span className="text-gray-900 font-medium">
-                        {poData?.poNumber}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-500 block">
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
                         Vendor Name
                       </span>
-                      <span className="text-gray-900 font-medium">
+                      <div className="text-gray-900 font-medium">
                         {poData?.vendorName}
-                      </span>
+                      </div>
                     </div>
                     <div>
-                      {/* Requirement 2a: Read Only PO Date */}
-                      <span className="text-sm text-gray-500 block">
-                        PO Date
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
+                        Vendor Address
                       </span>
-                      <input
-                        type="date"
-                        value={poData?.poDate}
-                        disabled
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
-                      />
+                      <div className="text-gray-900">
+                        {poData?.vendorAddress}
+                      </div>
                     </div>
                     <div>
-                      {/* Requirement 2b: Autofilled Payment Terms */}
-                      <span className="text-sm text-gray-500 block">
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
+                        Vendor PIC Name
+                      </span>
+                      <div className="text-gray-900">
+                        {poData?.vendorPIC}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
+                        Legal Entity (PO Suffix)
+                      </span>
+                      <select
+                        value={poData?.legalEntity}
+                        onChange={(e) =>
+                          handleEntityChange(
+                            e.target.value as "CSI" | "RMI",
+                          )
+                        }
+                        className="mt-1 block w-32 border border-gray-300 rounded-md text-sm px-2 py-1"
+                      >
+                        <option value="RMI">RMI</option>
+                        <option value="CSI">CSI</option>
+                      </select>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
+                        PO Number
+                      </span>
+                      <div className="text-gray-900 font-mono font-bold text-lg">
+                        {poData?.poNumber}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500 uppercase font-semibold">
                         Payment Terms
                       </span>
-                      <input
-                        type="text"
-                        value={poData?.paymentTerms}
-                        disabled
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm bg-gray-100 text-gray-500 px-3 py-2 sm:text-sm"
-                      />
+                      <div className="text-gray-900">
+                        {poData?.paymentTerms}
+                      </div>
                     </div>
-
-                    {/* ETA Input */}
                     <div>
-                      <span className="text-sm text-gray-500 block mb-1">
-                        ETA{" "}
+                      <label className="text-xs text-gray-500 uppercase font-semibold block mb-1">
+                        Delivery Date (ETA){" "}
                         <span className="text-red-500">*</span>
-                      </span>
+                      </label>
                       <input
                         type="date"
                         value={poData?.eta}
@@ -587,176 +710,404 @@ export default function GeneratePOModalUpdated({
                               : null,
                           )
                         }
-                        className="border border-gray-300 rounded px-2 py-1 text-sm w-full focus:ring-2 focus:ring-[#ec2224]"
+                        className="border border-gray-300 rounded px-3 py-1 text-sm w-full max-w-[200px] focus:ring-2 focus:ring-[#ec2224]"
                         required
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Requirement 2c: Adjusted Table Columns */}
-                <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                  <table className="w-full text-sm text-left whitespace-nowrap">
-                    <thead className="bg-gray-50 text-gray-700 font-medium border-b">
-                      <tr>
-                        <th className="px-4 py-3">No</th>
-                        <th className="px-4 py-3">Brand</th>
-                        <th className="px-4 py-3">
-                          Brand Item
-                        </th>
-                        <th className="px-4 py-3">Item Name</th>
-                        <th className="px-4 py-3">City</th>
-                        <th className="px-4 py-3">Qty</th>
-                        <th className="px-4 py-3">PIC</th>
-                        <th className="px-4 py-3">Prop Code</th>
-                        <th className="px-4 py-3">Prop Name</th>
-                        <th className="px-4 py-3">Address</th>
-                        <th className="px-4 py-3 text-right">
-                          Unit Price
-                        </th>
-                        <th className="px-4 py-3 text-right">
-                          Total
-                        </th>
-                        <th
-                          className="px-4 py-3 text-center"
-                          style={{ width: "80px" }}
-                        >
-                          WHT %
-                        </th>
-                        {/* Requirement 2e: Status Column Removed */}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {poData?.items.map((item, idx) => (
-                        <tr
-                          key={idx}
-                          className={
-                            item.status === "Not Ready"
-                              ? "bg-gray-50/50"
-                              : ""
-                          }
-                        >
-                          <td className="px-4 py-3">
-                            {idx + 1}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.brandProperty}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.brandItem}
-                          </td>
-                          <td className="px-4 py-3 font-medium">
-                            {item.itemName}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.region}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.quantity} {item.uom}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.pic}
-                          </td>
-                          <td className="px-4 py-3">
-                            {item.propertyCode}
-                          </td>
-                          <td
-                            className="px-4 py-3 truncate max-w-[150px]"
-                            title={item.propertyName}
-                          >
-                            {item.propertyName}
-                          </td>
-                          <td
-                            className="px-4 py-3 truncate max-w-[150px]"
-                            title={item.propertyAddress}
-                          >
-                            {item.propertyAddress}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {new Intl.NumberFormat(
-                              "id-ID",
-                            ).format(item.unitPrice)}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            {new Intl.NumberFormat(
-                              "id-ID",
-                            ).format(
-                              item.unitPrice * item.quantity,
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center">
-                            <input
-                              type="number"
-                              value={item.whtPercentage}
-                              onChange={(e) => {
-                                const val =
-                                  parseFloat(e.target.value) ||
-                                  0;
-                                const newItems = [
-                                  ...(poData?.items || []),
-                                ];
-                                newItems[idx] = {
-                                  ...item,
-                                  whtPercentage: val,
-                                };
-                                setPOData(
-                                  poData
-                                    ? {
-                                        ...poData,
-                                        items: newItems,
-                                      }
-                                    : null,
-                                );
-                              }}
-                              className="w-12 border rounded px-1 text-center text-xs"
-                            />
-                          </td>
+                {/* Table 1 - Aggregate */}
+                <div>
+                  <h4 className="text-gray-800 font-medium mb-2">
+                    1. Item Summary (Aggregated)
+                  </h4>
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-100 text-gray-700 font-semibold">
+                        <tr>
+                          <th className="px-4 py-3 w-12">No</th>
+                          <th className="px-4 py-3">
+                            Delivery Date
+                          </th>
+                          <th className="px-4 py-3">
+                            Item Name
+                          </th>
+                          <th className="px-4 py-3 text-center">
+                            Qty
+                          </th>
+                          <th className="px-4 py-3 text-right">
+                            Unit Price (IDR)
+                          </th>
+                          <th className="px-4 py-3 text-right">
+                            Amount (IDR)
+                          </th>
+                          <th className="px-4 py-3 text-center w-20">
+                            WHT %
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {aggregatedItems.map((item, idx) => (
+                          <tr key={idx} className="bg-white">
+                            <td className="px-4 py-3 text-center">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {poData?.eta || "-"}
+                            </td>
+                            <td className="px-4 py-3 font-medium text-gray-900">
+                              {item.itemName}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {item.quantity}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {new Intl.NumberFormat(
+                                "id-ID",
+                              ).format(item.unitPrice)}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              {new Intl.NumberFormat(
+                                "id-ID",
+                              ).format(
+                                item.quantity * item.unitPrice,
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center bg-gray-50 text-gray-500 cursor-not-allowed">
+                              {item.whtPercentage}%
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary 1 */}
+                  <div className="mt-4 flex justify-end">
+                    <div className="w-80 bg-gray-50 p-4 rounded-lg space-y-2 border border-gray-200">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          Total
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(totals.totalAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          PPN ({poData?.ppnPercentage}%)
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(totals.ppn)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">
+                          Service Charge (
+                          {poData?.serviceChargePercentage}%)
+                        </span>
+                        <span className="font-medium">
+                          {formatCurrency(totals.sc)}
+                        </span>
+                      </div>
+                      {/* Requirement 2: PB1 is NOT editable */}
+                      <div className="flex justify-between items-center text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-600">
+                            PB1
+                          </span>
+                          {/* Display only, effectively 0 or whatever calculated */}
+                          <span className="text-gray-500 text-xs bg-gray-200 px-2 py-0.5 rounded">
+                            {poData?.pb1Percentage}%
+                          </span>
+                        </div>
+                        <span className="font-medium">
+                          {formatCurrency(totals.pb1)}
+                        </span>
+                      </div>
+                      <div className="border-t border-gray-300 pt-2 flex justify-between text-base font-bold text-gray-900">
+                        <span>Grand Total</span>
+                        <span>
+                          {formatCurrency(totals.grandTotal)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Requirement 2d: Total Calculations */}
-                <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      Total Quantity:
-                    </span>
-                    <span className="font-medium">
-                      {totals.totalQty}
-                    </span>
+                {/* Table 2 - Breakdown */}
+                <div>
+                  <h4 className="text-gray-800 font-medium mb-2">
+                    2. Item Breakdown (Per Request)
+                  </h4>
+                  <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                    <table className="w-full text-sm text-left whitespace-nowrap">
+                      <thead className="bg-gray-100 text-gray-700 font-semibold">
+                        <tr>
+                          <th className="px-4 py-3 w-12">No</th>
+                          <th className="px-4 py-3 w-48">
+                            Brand
+                          </th>
+                          <th className="px-4 py-3">
+                            Item Name
+                          </th>
+                          <th className="px-4 py-3 text-center">
+                            Qty
+                          </th>
+                          <th className="px-4 py-3 w-40">
+                            PIC Number (Manual)
+                          </th>
+                          <th className="px-4 py-3">
+                            Prop Code
+                          </th>
+                          <th className="px-4 py-3">
+                            Prop Name
+                          </th>
+                          <th className="px-4 py-3">
+                            Prop Address
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {poData?.items.map((item, idx) => (
+                          <tr
+                            key={item.id}
+                            className="bg-white hover:bg-gray-50"
+                          >
+                            <td className="px-4 py-3 text-center">
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3">
+                              {/* Requirement 2: Brand must be one from the list */}
+                              <select
+                                value={item.brandProperty}
+                                onChange={(e) => {
+                                  const newItems = [
+                                    ...(poData?.items || []),
+                                  ];
+                                  newItems[idx] = {
+                                    ...item,
+                                    brandProperty:
+                                      e.target.value,
+                                  };
+                                  setPOData(
+                                    poData
+                                      ? {
+                                          ...poData,
+                                          items: newItems,
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-[#ec2224]"
+                              >
+                                {ALLOWED_BRANDS.map((brand) => (
+                                  <option
+                                    key={brand}
+                                    value={brand}
+                                  >
+                                    {brand}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="px-4 py-3 font-medium">
+                              {item.itemName}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {item.quantity}
+                            </td>
+                            <td className="px-4 py-3">
+                              <input
+                                type="text"
+                                placeholder="Input PIC No"
+                                value={item.picNumber}
+                                onChange={(e) => {
+                                  const newItems = [
+                                    ...(poData?.items || []),
+                                  ];
+                                  newItems[idx] = {
+                                    ...item,
+                                    picNumber: e.target.value,
+                                  };
+                                  setPOData(
+                                    poData
+                                      ? {
+                                          ...poData,
+                                          items: newItems,
+                                        }
+                                      : null,
+                                  );
+                                }}
+                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:border-[#ec2224] focus:outline-none"
+                              />
+                            </td>
+                            <td className="px-4 py-3 text-gray-600">
+                              {item.propertyCode}
+                            </td>
+                            <td
+                              className="px-4 py-3 truncate max-w-[150px]"
+                              title={item.propertyName}
+                            >
+                              {item.propertyName}
+                            </td>
+                            <td
+                              className="px-4 py-3 truncate max-w-[200px]"
+                              title={item.propertyAddress}
+                            >
+                              {item.propertyAddress}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      Total Amount:
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(totals.totalAmount)}
-                    </span>
+
+                  {/* Summary 2 */}
+                  <div className="mt-3 flex justify-end">
+                    <div className="bg-gray-100 px-4 py-2 rounded-md font-medium text-gray-800 text-sm">
+                      Total Quantity: {totals.totalQty}
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      Service Charge (
-                      {poData?.serviceChargePercentage}%):
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(totals.sc)}
-                    </span>
+                </div>
+
+                {/* Footer Inputs */}
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 space-y-4">
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Agreement Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        No Agreement
+                      </label>
+                      <select
+                        value={poData?.agreementNumber}
+                        onChange={(e) => {
+                          const selected =
+                            vendorAgreements?.find(
+                              (a: any) =>
+                                a.agreementNumber ===
+                                e.target.value,
+                            );
+                          setPOData(
+                            poData
+                              ? {
+                                  ...poData,
+                                  agreementNumber:
+                                    e.target.value,
+                                  agreementDate:
+                                    selected?.date || "",
+                                }
+                              : null,
+                          );
+                        }}
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-[#ec2224]"
+                      >
+                        <option value="">
+                          Select Agreement
+                        </option>
+                        {vendorAgreements.map(
+                          (a: any, i: number) => (
+                            <option
+                              key={i}
+                              value={
+                                a.agreementNumber || `AGR-${i}`
+                              }
+                            >
+                              {a.agreementNumber ||
+                                `Agreement ${i + 1}`}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date Agreement
+                      </label>
+                      <input
+                        type="date"
+                        value={poData?.agreementDate}
+                        onChange={(e) =>
+                          setPOData(
+                            poData
+                              ? {
+                                  ...poData,
+                                  agreementDate: e.target.value,
+                                }
+                              : null,
+                          )
+                        }
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
+                      />
+                    </div>
+
+                    {/* Quotation Inputs */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        No Quotation
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Enter Quotation Number"
+                        value={poData?.quotationNumber}
+                        onChange={(e) =>
+                          setPOData(
+                            poData
+                              ? {
+                                  ...poData,
+                                  quotationNumber:
+                                    e.target.value,
+                                }
+                              : null,
+                          )
+                        }
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-[#ec2224]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Date Quotation
+                      </label>
+                      <input
+                        type="date"
+                        value={poData?.quotationDate}
+                        onChange={(e) =>
+                          setPOData(
+                            poData
+                              ? {
+                                  ...poData,
+                                  quotationDate: e.target.value,
+                                }
+                              : null,
+                          )
+                        }
+                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      />
+                    </div>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">
-                      PPN ({poData?.ppnPercentage}%):
-                    </span>
-                    <span className="font-medium">
-                      {formatCurrency(totals.ppn)}
-                    </span>
-                  </div>
-                  <div className="border-t border-gray-300 pt-2 flex justify-between text-lg font-bold text-gray-900">
-                    <span>Grand Total:</span>
-                    <span>
-                      {formatCurrency(totals.grandTotal)}
-                    </span>
+
+                  {/* Note */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Note
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={poData?.note}
+                      onChange={(e) =>
+                        setPOData(
+                          poData
+                            ? {
+                                ...poData,
+                                note: e.target.value,
+                              }
+                            : null,
+                        )
+                      }
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-1 focus:ring-[#ec2224]"
+                      placeholder="Enter additional notes..."
+                    />
                   </div>
                 </div>
 
@@ -767,12 +1118,12 @@ export default function GeneratePOModalUpdated({
                         (i) => i.status === "Ready",
                       ).length
                     }{" "}
-                    items marked as Ready.
+                    items ready.
                   </div>
                   <div className="flex gap-3">
                     <button
                       onClick={() => setStep("selection")}
-                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg"
+                      className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
                     >
                       Back
                     </button>

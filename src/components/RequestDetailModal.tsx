@@ -264,28 +264,18 @@ export default function RequestDetailModal({
                 key={item.id}
                 className="border-4 border-[#ec2224] rounded-lg p-6 bg-white"
               >
+                {/* Header with Request Item Id */}
                 <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-[#ec2224]">
                   <h3 className="text-gray-900">
                     ITEM {index + 1} OF{" "}
                     {currentRequest.items.length}
                   </h3>
                   <div className="flex items-center gap-4">
-                    <span
-                      className={`px-3 py-1 rounded-full text-sm font-medium border ${
-                        item.status === "Waiting PO"
-                          ? "bg-yellow-100 text-yellow-800 border-yellow-200"
-                          : item.status ===
-                              "On Process by Vendor"
-                            ? "bg-purple-100 text-purple-800 border-purple-200"
-                            : item.status === "Delivered"
-                              ? "bg-green-100 text-green-800 border-green-200"
-                              : "bg-amber-100 text-amber-800 border-amber-200"
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      Item ID: {item.id}
+                    <span className="text-sm text-gray-600 font-medium">
+                      Request Item Id:{" "}
+                      <span className="font-mono text-gray-800">
+                        {item.id}
+                      </span>
                     </span>
                   </div>
                 </div>
@@ -294,7 +284,6 @@ export default function RequestDetailModal({
                   item={item}
                   vendors={vendors}
                   requestStatus={item.status}
-                  // FIXED: Passed requestPropertyType
                   requestPropertyType={
                     currentRequest.propertyType
                   }
@@ -355,7 +344,7 @@ export default function RequestDetailModal({
           <div className="sticky bottom-0 bg-white border-t border-gray-200 px-8 py-6 flex justify-end gap-3">
             <button
               onClick={onClose}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors"
             >
               Close
             </button>

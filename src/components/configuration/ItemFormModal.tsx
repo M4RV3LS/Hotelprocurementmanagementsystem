@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
-import { X, Image as ImageIcon } from "lucide-react";
+import {
+  X,
+  Image as ImageIcon,
+  AlertCircle,
+} from "lucide-react";
 import { itemCategoriesAPI } from "../../utils/api";
 import type { Item } from "./ItemConfiguration";
 import {
@@ -41,6 +45,7 @@ export default function ItemFormModal({
   );
 
   const [categories, setCategories] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     itemCategoriesAPI.getAll().then(setCategories);
@@ -82,10 +87,89 @@ export default function ItemFormModal({
 
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev: any) => ({ ...prev, [field]: value }));
+    // Clear error when user makes changes
+    if (error) setError(null);
+  };
+
+  const handleNumberChange = (field: string, value: string) => {
+    // Allow empty string to support "clearing" the field for validation
+    const numValue = value === "" ? "" : parseFloat(value);
+    setFormData((prev: any) => ({
+      ...prev,
+      [field]: numValue,
+    }));
+    if (error) setError(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    // --- Requirement 2: Weightage Validation ---
+    const w = formData.weightage;
+
+    // Check if Null or Blank (handling empty string from input clearing)
+    if (w === "" || w === null || w === undefined || isNaN(w)) {
+      setError("Weightage cannot be blank");
+      return;
+    }
+
+    // Check Range
+    if (w < 0) {
+      setError("Weightage cannot below 0");
+      return;
+    }
+    if (w > 100) {
+      setError("Weightage cannot above 100");
+      return;
+    }
+
+    // --- Requirement 3: Mandatory Fields Validation ---
+    if (!formData.itemName?.trim()) {
+      setError("Item Name is mandatory");
+      return;
+    }
+
+    if (!formData.brandName) {
+      setError("Brand Name is mandatory");
+      return;
+    }
+
+    if (!formData.categoryId) {
+      setError("Item Category is mandatory");
+      return;
+    }
+
+    // Product Specific Mandatory Fields
+    if (formData.itemType === "Product") {
+      if (!formData.commodityCode) {
+        setError("Commodities Name is mandatory for products");
+        return;
+      }
+
+      // Physical Specs Validation
+      const { length, width, height, weight } = formData;
+      if (
+        length === "" ||
+        length === null ||
+        isNaN(length) ||
+        width === "" ||
+        width === null ||
+        isNaN(width) ||
+        height === "" ||
+        height === null ||
+        isNaN(height) ||
+        weight === "" ||
+        weight === null ||
+        isNaN(weight)
+      ) {
+        setError(
+          "All Physical Specifications (Length, Width, Height, Weight) are mandatory",
+        );
+        return;
+      }
+    }
+
     onSave(formData);
   };
 
@@ -97,7 +181,7 @@ export default function ItemFormModal({
       />
       <div className="fixed inset-0 z-50 overflow-y-auto flex items-center justify-center p-4">
         <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
             <h3 className="text-gray-900">
               {item ? "Edit Item" : "Add New Item"}
             </h3>
@@ -195,26 +279,28 @@ export default function ItemFormModal({
               {/* Weightage Field */}
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Weightage
+                  Weightage{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  value={formData.weightage || ""}
+                  value={formData.weightage}
                   onChange={(e) =>
-                    handleInputChange(
+                    handleNumberChange(
                       "weightage",
-                      parseFloat(e.target.value),
+                      e.target.value,
                     )
                   }
-                  placeholder="e.g. 1.0"
+                  placeholder="0 - 100"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#ec2224]"
                 />
               </div>
 
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Brand Name
+                  Brand Name{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.brandName}
@@ -235,11 +321,12 @@ export default function ItemFormModal({
                 </select>
               </div>
 
-              {/* Commodities wrapped in conditional check */}
+              {/* Commodities - Conditional & Mandatory */}
               {formData.itemType === "Product" && (
                 <div>
                   <label className="block text-gray-700 mb-2">
-                    Commodities Name
+                    Commodities Name{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.commodityCode}
@@ -267,7 +354,8 @@ export default function ItemFormModal({
 
               <div>
                 <label className="block text-gray-700 mb-2">
-                  Item Category
+                  Item Category{" "}
+                  <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={formData.categoryId || ""}
@@ -293,15 +381,14 @@ export default function ItemFormModal({
                   ))}
                 </select>
               </div>
-
-              {/* Requirement 1: UoM Field Removed */}
             </div>
 
             {/* Dimensions & Weight (Only for Physical Products) */}
             {formData.itemType === "Product" && (
               <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3 text-sm">
+                <h4 className="font-medium text-gray-900 mb-3 text-sm flex items-center gap-2">
                   Physical Specifications
+                  <span className="text-red-500">*</span>
                 </h4>
                 <div className="grid grid-cols-4 gap-4">
                   <div>
@@ -313,9 +400,9 @@ export default function ItemFormModal({
                       min="0"
                       value={formData.length}
                       onChange={(e) =>
-                        handleInputChange(
+                        handleNumberChange(
                           "length",
-                          parseFloat(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="w-full px-3 py-2 border rounded-md text-sm"
@@ -330,9 +417,9 @@ export default function ItemFormModal({
                       min="0"
                       value={formData.width}
                       onChange={(e) =>
-                        handleInputChange(
+                        handleNumberChange(
                           "width",
-                          parseFloat(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="w-full px-3 py-2 border rounded-md text-sm"
@@ -347,9 +434,9 @@ export default function ItemFormModal({
                       min="0"
                       value={formData.height}
                       onChange={(e) =>
-                        handleInputChange(
+                        handleNumberChange(
                           "height",
-                          parseFloat(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="w-full px-3 py-2 border rounded-md text-sm"
@@ -364,9 +451,9 @@ export default function ItemFormModal({
                       min="0"
                       value={formData.weight}
                       onChange={(e) =>
-                        handleInputChange(
+                        handleNumberChange(
                           "weight",
-                          parseFloat(e.target.value),
+                          e.target.value,
                         )
                       }
                       className="w-full px-3 py-2 border rounded-md text-sm"
@@ -433,6 +520,14 @@ export default function ItemFormModal({
                 </label>
               </div>
             </div>
+
+            {/* Error Message Display */}
+            {error && (
+              <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg flex items-center gap-2 text-sm">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
 
             <div className="sticky bottom-0 bg-white border-t border-gray-200 pt-4 flex justify-end gap-3">
               <button

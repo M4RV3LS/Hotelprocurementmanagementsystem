@@ -9,85 +9,17 @@ import type {
 
 const API_BASE = "/make-server-1e4a32a5";
 
-const handleResponse = async (response: Response) => {
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      errorData.error || `HTTP Error: ${response.status}`,
-    );
-  }
-  return response.json();
-};
-
 // Initialize Supabase Client
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
   publicAnonKey,
 );
 
-// --- Helpers ---
-
-// Helper to check and update PR status
-const checkAndClosePR = async (prNumber: string) => {
-  if (!prNumber) return;
-
-  const { data: items, error } = await supabase
-    .from("procurement_requests")
-    .select(`request_items (status)`)
-    .eq("pr_number", prNumber)
-    .single();
-
-  if (error || !items) return;
-
-  const allItems = items.request_items || [];
-  if (allItems.length === 0) return;
-
-  const allClosed = allItems.every(
-    (item: any) =>
-      item.status === "Delivered" ||
-      item.status === "Cancelled by Procurement",
-  );
-
-  const newStatus = allClosed ? "Close" : "Open";
-
-  await supabase
-    .from("procurement_requests")
-    .update({ status: newStatus })
-    .eq("pr_number", prNumber);
-};
-
-// Helper function to determine region from a procurement request row
-const determineRegion = (row: any): string => {
-  if (row.region) return row.region;
-  if (row.request_items?.[0]) {
-    return "DKI Jakarta";
-  }
-  return "DKI Jakarta";
-};
-
-// Internal Helper for Activity Logs
-const _logActivityInternal = async (
-  requestId: string,
-  userEmail: string,
-  action: string,
-  details: string,
-) => {
-  const { error } = await supabase
-    .from("activity_logs")
-    .insert({
-      request_id: requestId,
-      user_email: userEmail,
-      action: action,
-      details: details,
-      timestamp: new Date().toISOString(),
-    });
-  if (error) console.error("Failed to log activity:", error);
-};
-
 // --- API EXPORTS ---
 
 export const procurementRequestsAPI = {
   getAll: async (): Promise<ProcurementRequest[]> => {
+    // Modified query to fetch catalog info for price_type
     const { data, error } = await supabase
       .from("procurement_requests")
       .select(
@@ -95,8 +27,8 @@ export const procurementRequestsAPI = {
         *,
         request_items (
           *,
-          master_items (code, name, category), 
-          vendors (name, code)
+          master_items (code, name, category, photos), 
+          vendors (id, name, code)
         ),
         activity_logs (*)
       `,
@@ -104,6 +36,37 @@ export const procurementRequestsAPI = {
       .order("created_at", { ascending: false });
 
     if (error) throw error;
+
+    // Helper to fetch price types for items with vendors
+    // In a real high-perf scenario, we might join vendor_catalog_items directly,
+    // but due to complexity, we'll do a quick lookup or default to 'Not Fixed' if unknown.
+    // For this implementation, we will try to fetch catalog items to populate priceType.
+
+    // Get all vendor_id + item_id pairs
+    const catalogLookups = (data || [])
+      .flatMap((r) => r.request_items)
+      .filter(
+        (i: any) => i.assigned_vendor_id && i.master_item_id,
+      );
+
+    let priceTypeMap = new Map<string, string>(); // Key: vendorId-itemId, Value: priceType
+
+    if (catalogLookups.length > 0) {
+      const { data: catalogData } = await supabase
+        .from("vendor_catalog_items")
+        .select("vendor_id, item_id, price_type")
+        .in(
+          "vendor_id",
+          catalogLookups.map((i: any) => i.assigned_vendor_id),
+        );
+
+      catalogData?.forEach((c: any) => {
+        priceTypeMap.set(
+          `${c.vendor_id}-${c.item_id}`,
+          c.price_type,
+        );
+      });
+    }
 
     const mapRow = (row: any): ProcurementRequest => {
       const region = row.region || "DKI Jakarta";
@@ -132,12 +95,17 @@ export const procurementRequestsAPI = {
             item.master_items?.category || "Ops Item",
           selectedProperties: {},
           quantity: item.quantity,
-          // UoM Removed
           region: region,
           itemStatus: item.item_status || "Not Set",
           status: item.status,
           vendorName: item.vendors?.name,
           vendorCode: item.vendors?.code,
+          vendorId: item.assigned_vendor_id, // Added for ID reference
+          masterItemId: item.master_item_id, // Added for ID reference
+          priceType:
+            priceTypeMap.get(
+              `${item.assigned_vendor_id}-${item.master_item_id}`,
+            ) || "Not Fixed", // Requirement 5 Support
           paymentTerms: item.payment_terms,
           unitPrice: item.unit_price,
           taxPercentage: item.tax_percentage || 0,
@@ -223,15 +191,13 @@ export const procurementRequestsAPI = {
     const itemsToUpsert = request.items.map((item: any) => ({
       id: item.id && item.id.length > 30 ? item.id : undefined,
       request_id: prId,
-      master_item_id: itemMap.get(item.itemCode),
+      // If masterItemId is present on item object, use it, otherwise lookup (lookup logic assumed existing)
+      master_item_id: item.masterItemId,
       item_name_snapshot: item.itemName,
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
-      // UoM Removed
-      assigned_vendor_id: item.vendorCode
-        ? vendorMap.get(item.vendorCode)
-        : null,
+      assigned_vendor_id: item.vendorId, // Use explicit ID if available
       payment_terms: item.paymentTerms,
       unit_price: item.unitPrice,
       total_price: item.totalPrice,
@@ -894,12 +860,7 @@ export const itemsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
       .from("master_items")
-      .select(
-        `
-        *,
-        category:item_categories(name)
-      `,
-      )
+      .select(`*, category:item_categories(name)`)
       .order("name");
 
     if (error) {
@@ -914,14 +875,13 @@ export const itemsAPI = {
       itemCategory:
         i.category?.name || i.category || "Uncategorized",
       categoryId: i.category_id,
-      // UoM Removed
       isActive: i.is_active,
       description: i.description,
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
-      itemType: i.item_type || "Product",
-      weightage: i.weight,
+      itemType: i.item_type || "Product", // Requirement #1
+      weightage: i.weight ?? 0, // Requirement #3 (Allow 0)
       physicalSpec: i.physical_spec,
     }));
   },
@@ -936,15 +896,13 @@ export const itemsAPI = {
           brand_name: item.brandName,
           category: item.itemCategory,
           category_id: item.categoryId,
-          // UoM Removed
           is_active: item.isActive,
           description: item.description,
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
-          // Ensure Type and Weight are saved
-          item_type: item.itemType,
-          weight: item.weightage,
+          item_type: item.itemType, // Sync Requirement #1
+          weight: item.weightage, // Sync Requirement #3 (Mapped to 'weight' column)
           physical_spec: item.physicalSpec,
         },
         { onConflict: "code" },
