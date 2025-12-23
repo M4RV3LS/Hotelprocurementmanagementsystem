@@ -7,7 +7,7 @@ import type {
 } from "../data/mockData";
 import ItemDetailSection from "./request-detail/ItemDetailSection";
 import LogActivity from "./request-detail/LogActivity";
-import { procurementRequestsAPI } from "../utils/api"; // Import API
+import { procurementRequestsAPI } from "../utils/api";
 
 interface RequestDetailModalProps {
   request: ProcurementRequest;
@@ -25,28 +25,36 @@ export default function RequestDetailModal({
   const [currentRequest, setCurrentRequest] =
     useState<ProcurementRequest>(request);
 
-  // Requirement 2: Function to sync log to Database
+  // Requirement: Function to sync log to Database
   const saveLogToDB = async (
     action: string,
     details: string,
   ) => {
     // In a real app, you would define user info from context
     const userEmail = "system@reddoorz.com";
-    await procurementRequestsAPI.logActivity(
-      currentRequest.prNumber,
-      userEmail,
-      action,
-      details,
-    );
+    try {
+      await procurementRequestsAPI.logActivity(
+        currentRequest.prNumber,
+        userEmail,
+        action,
+        details,
+      );
+    } catch (error) {
+      console.error("Failed to save log to DB:", error);
+      // Suppress error to prevent UI blocking
+    }
   };
 
+  // FIX: Added random suffix to ensure uniqueness even if called multiple times in same millisecond
   const addLog = (
     req: ProcurementRequest,
     action: string,
     details: string,
   ): ProcurementRequest => {
+    const uniqueId = `log-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+
     const newLog: ActivityLog = {
-      id: `log-${Date.now()}`,
+      id: uniqueId,
       timestamp: new Date().toISOString(),
       user: "System",
       action: action,
@@ -63,7 +71,7 @@ export default function RequestDetailModal({
     itemId: string,
     updatedItem: Partial<ProcurementItem>,
   ) => {
-    // 1. Update the specific item
+    // 1. Create the next state object based on current state
     let nextRequest: ProcurementRequest = {
       ...currentRequest,
       items: currentRequest.items.map((item) =>
@@ -71,7 +79,7 @@ export default function RequestDetailModal({
       ),
     };
 
-    // 2. Log updates and Handle Auto-Transition
+    // 2. Identify Changes for Logging
     const oldItem = currentRequest.items.find(
       (i) => i.id === itemId,
     );
@@ -80,7 +88,7 @@ export default function RequestDetailModal({
     );
 
     if (newItem && oldItem) {
-      // Requirement 2.2: Log Vendor Assignment
+      // Check 1: Vendor Assignment
       if (
         updatedItem.vendorName &&
         updatedItem.vendorName !== oldItem.vendorName
@@ -94,7 +102,7 @@ export default function RequestDetailModal({
         saveLogToDB("Vendor Assignment", details);
       }
 
-      // Requirement 2.2: Log Payment Method
+      // Check 2: Payment Method
       if (
         updatedItem.paymentTerms &&
         updatedItem.paymentTerms !== oldItem.paymentTerms
@@ -108,8 +116,7 @@ export default function RequestDetailModal({
         saveLogToDB("Payment Method Update", details);
       }
 
-      // Requirement 2.1: Log Status Changes
-      // Only log specific statuses requested
+      // Check 3: Status Changes (Explicit)
       const loggableStatuses = [
         "Review by Procurement",
         "Waiting PO",
@@ -120,21 +127,23 @@ export default function RequestDetailModal({
         "Cancelled by Procurement",
       ];
 
-      // Check if status changed or if it was auto-transitioned
+      // Check if status explicitly changed in the update payload
       let statusChanged =
         updatedItem.status &&
         updatedItem.status !== oldItem.status;
 
-      // Auto-Transition Logic (Existing)
+      // Check 4: Auto-Transition Logic (Review -> Waiting PO)
+      // If all conditions are met, force the status change here
       if (
         newItem.status === "Review by Procurement" &&
         newItem.vendorName &&
         (newItem.totalPrice || 0) > 0
       ) {
-        // Force update for auto-transition
+        // Apply auto-transition to the items in nextRequest
         nextRequest.items = nextRequest.items.map((i) =>
           i.id === itemId ? { ...i, status: "Waiting PO" } : i,
         );
+        // Mark status as changed for logging purposes
         statusChanged = true;
       }
 
@@ -142,7 +151,9 @@ export default function RequestDetailModal({
       const finalItem = nextRequest.items.find(
         (i) => i.id === itemId,
       )!;
+
       if (
+        statusChanged &&
         finalItem.status !== oldItem.status &&
         loggableStatuses.includes(finalItem.status)
       ) {
@@ -156,6 +167,7 @@ export default function RequestDetailModal({
       }
     }
 
+    // 3. Update State and Propagate to Parent
     setCurrentRequest(nextRequest);
     onUpdate(nextRequest);
   };

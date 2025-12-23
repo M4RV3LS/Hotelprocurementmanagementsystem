@@ -7,19 +7,75 @@ import type {
   ItemCategory,
 } from "../data/mockData";
 
-const API_BASE = "/make-server-1e4a32a5";
-
 // Initialize Supabase Client
 const supabase = createClient(
   `https://${projectId}.supabase.co`,
   publicAnonKey,
 );
 
+// --- INTERNAL HELPERS (Defined at top level) ---
+
+/**
+ * Logs an activity to the database.
+ * Defined here to be accessible by all API objects below.
+ */
+const _logActivityInternal = async (
+  requestId: string,
+  userEmail: string,
+  action: string,
+  details: string,
+) => {
+  if (!requestId) {
+    console.error("Cannot log activity: Missing Request ID");
+    return;
+  }
+  const { error } = await supabase
+    .from("activity_logs")
+    .insert({
+      request_id: requestId,
+      user_email: userEmail,
+      action: action,
+      details: details,
+      timestamp: new Date().toISOString(),
+    });
+  if (error) console.error("Failed to log activity:", error);
+};
+
+/**
+ * Checks if a PR should be closed based on its items' status.
+ */
+const checkAndClosePR = async (prNumber: string) => {
+  if (!prNumber) return;
+
+  const { data: items, error } = await supabase
+    .from("procurement_requests")
+    .select(`request_items (status)`)
+    .eq("pr_number", prNumber)
+    .single();
+
+  if (error || !items) return;
+
+  const allItems = items.request_items || [];
+  if (allItems.length === 0) return;
+
+  const allClosed = allItems.every(
+    (item: any) =>
+      item.status === "Delivered" ||
+      item.status === "Cancelled by Procurement",
+  );
+
+  const newStatus = allClosed ? "Close" : "Open";
+
+  await supabase
+    .from("procurement_requests")
+    .update({ status: newStatus })
+    .eq("pr_number", prNumber);
+};
+
 // --- API EXPORTS ---
 
 export const procurementRequestsAPI = {
   getAll: async (): Promise<ProcurementRequest[]> => {
-    // Modified query to fetch catalog info for price_type
     const { data, error } = await supabase
       .from("procurement_requests")
       .select(
@@ -27,8 +83,8 @@ export const procurementRequestsAPI = {
         *,
         request_items (
           *,
-          master_items (code, name, category, photos), 
-          vendors (id, name, code)
+          master_items (code, name, category), 
+          vendors (name, code)
         ),
         activity_logs (*)
       `,
@@ -37,39 +93,10 @@ export const procurementRequestsAPI = {
 
     if (error) throw error;
 
-    // Helper to fetch price types for items with vendors
-    // In a real high-perf scenario, we might join vendor_catalog_items directly,
-    // but due to complexity, we'll do a quick lookup or default to 'Not Fixed' if unknown.
-    // For this implementation, we will try to fetch catalog items to populate priceType.
-
-    // Get all vendor_id + item_id pairs
-    const catalogLookups = (data || [])
-      .flatMap((r) => r.request_items)
-      .filter(
-        (i: any) => i.assigned_vendor_id && i.master_item_id,
-      );
-
-    let priceTypeMap = new Map<string, string>(); // Key: vendorId-itemId, Value: priceType
-
-    if (catalogLookups.length > 0) {
-      const { data: catalogData } = await supabase
-        .from("vendor_catalog_items")
-        .select("vendor_id, item_id, price_type")
-        .in(
-          "vendor_id",
-          catalogLookups.map((i: any) => i.assigned_vendor_id),
-        );
-
-      catalogData?.forEach((c: any) => {
-        priceTypeMap.set(
-          `${c.vendor_id}-${c.item_id}`,
-          c.price_type,
-        );
-      });
-    }
-
     const mapRow = (row: any): ProcurementRequest => {
+      // Ensure region has a fallback
       const region = row.region || "DKI Jakarta";
+
       return {
         prNumber: row.pr_number,
         prDate: row.pr_date,
@@ -100,12 +127,6 @@ export const procurementRequestsAPI = {
           status: item.status,
           vendorName: item.vendors?.name,
           vendorCode: item.vendors?.code,
-          vendorId: item.assigned_vendor_id, // Added for ID reference
-          masterItemId: item.master_item_id, // Added for ID reference
-          priceType:
-            priceTypeMap.get(
-              `${item.assigned_vendor_id}-${item.master_item_id}`,
-            ) || "Not Fixed", // Requirement 5 Support
           paymentTerms: item.payment_terms,
           unitPrice: item.unit_price,
           taxPercentage: item.tax_percentage || 0,
@@ -115,6 +136,7 @@ export const procurementRequestsAPI = {
           estimatedDeliveryStart: item.estimated_delivery_start,
           estimatedDeliveryEnd: item.estimated_delivery_end,
           deliveryProofId: item.delivery_proof_id,
+          isFixedPrice: false, // Default logic, usually handled by UI fetching
         })),
         activityLog: (row.activity_logs || []).map(
           (log: any) => ({
@@ -132,6 +154,7 @@ export const procurementRequestsAPI = {
   },
 
   save: async (request: ProcurementRequest) => {
+    // 1. Upsert PR Header
     const { data: prData, error: prError } = await supabase
       .from("procurement_requests")
       .upsert(
@@ -149,7 +172,7 @@ export const procurementRequestsAPI = {
           pic_name: request.picName,
           pic_number: request.picNumber,
           status: request.status,
-          note: request.note,
+          note: request.note || null,
           po_file_link: request.poFileLink,
         },
         { onConflict: "pr_number" },
@@ -160,6 +183,7 @@ export const procurementRequestsAPI = {
     if (prError) throw prError;
     const prId = prData.id;
 
+    // 2. Resolve Foreign Keys
     const uniqueVendorCodes = Array.from(
       new Set(
         (request.items || [])
@@ -188,16 +212,18 @@ export const procurementRequestsAPI = {
       masterItems?.map((i) => [i.code, i.id]),
     );
 
+    // 3. Upsert Items
     const itemsToUpsert = request.items.map((item: any) => ({
       id: item.id && item.id.length > 30 ? item.id : undefined,
       request_id: prId,
-      // If masterItemId is present on item object, use it, otherwise lookup (lookup logic assumed existing)
-      master_item_id: item.masterItemId,
+      master_item_id: itemMap.get(item.itemCode),
       item_name_snapshot: item.itemName,
       status: item.status,
       item_status: item.itemStatus,
       quantity: item.quantity,
-      assigned_vendor_id: item.vendorId, // Use explicit ID if available
+      assigned_vendor_id: item.vendorCode
+        ? vendorMap.get(item.vendorCode)
+        : null,
       payment_terms: item.paymentTerms,
       unit_price: item.unitPrice,
       total_price: item.totalPrice,
@@ -221,19 +247,47 @@ export const procurementRequestsAPI = {
     status: string,
     note?: string,
   ) => {
-    const reqs = await procurementRequestsAPI.getAll();
-    const req = reqs.find((r) => r.prNumber === prNumber);
-    if (req) {
-      await procurementRequestsAPI.save({
-        ...req,
-        status,
-        note,
-      });
-    }
+    const updatePayload: any = { status };
+    if (note !== undefined) updatePayload.note = note;
+
+    const { error } = await supabase
+      .from("procurement_requests")
+      .update(updatePayload)
+      .eq("pr_number", prNumber);
+
+    if (error) throw error;
   },
 
   updateAllItemsStatus: async () => {},
-  logActivity: async () => {},
+
+  logActivity: async (
+    prNumber: string,
+    userEmail: string,
+    action: string,
+    details: string,
+  ) => {
+    // 1. Resolve PR Number to UUID
+    const { data, error } = await supabase
+      .from("procurement_requests")
+      .select("id")
+      .eq("pr_number", prNumber)
+      .single();
+
+    if (error) {
+      console.error("Error finding PR for logging:", error);
+      return;
+    }
+
+    if (data?.id) {
+      await _logActivityInternal(
+        data.id,
+        userEmail,
+        action,
+        details,
+      );
+    }
+  },
+
   bulkUpdate: async (reqs: any[]) => {
     for (const r of reqs) await procurementRequestsAPI.save(r);
     return reqs;
@@ -296,7 +350,6 @@ export const purchaseOrdersAPI = {
         request_id: i.request_id,
         itemName: i.master_items?.name || i.item_name_snapshot,
         quantity: i.quantity,
-        // UoM Removed
         unitPrice: i.unit_price,
         totalPrice: i.total_price,
         status: i.status,
@@ -440,11 +493,7 @@ export const purchaseOrdersAPI = {
       });
 
     if (error) {
-      console.error("Storage Upload Error Details:", {
-        message: error.message,
-        path: cleanPath,
-        bucket: bucket,
-      });
+      console.error("Storage Upload Error:", error);
       throw error;
     }
 
@@ -657,30 +706,24 @@ export const vendorsAPI = {
       id: v.id,
       vendorCode: v.code,
       vendorName: v.name,
-      vendorType: v.vendor_type || "Corporation",
-
-      regionalCoverages: v.regional_coverage || [],
       vendorRegion: v.region,
-
+      regionalCoverages: v.regional_coverage || [],
       vendorAddress: v.address,
       vendorEmail: v.email,
-      email2: v.email_2 || "",
       vendorPhone: v.phone,
-
-      contact_person: v.contact_person,
       picName: v.contact_person,
-
-      ppnPercentage: v.ppn_percentage,
-      serviceChargePercentage: v.service_charge_percentage,
+      contact_person: v.contact_person,
       paymentMethods: v.payment_methods,
+      ppnPercentage: v.ppn_percentage,
+      serviceChargePercentage: v.service_charge_percentage || 0,
       isActive: v.is_active,
       vendorAgreementLink: v.agreement_link,
       deliveryFee: v.delivery_fee,
-
       agreements: Array.isArray(v.agreements)
         ? v.agreements
         : [],
 
+      // Legal & Docs
       nibNumber: v.nib_number,
       nibFileLink: v.nib_file_link,
       ktpNumber: v.ktp_number,
@@ -693,22 +736,6 @@ export const vendorsAPI = {
       bankAccountDocLink: v.bank_account_doc_link,
       legalDocLink: v.legal_doc_link,
 
-      sppkpNumber: v.sppkp_number,
-      sppkpFileLink: v.sppkp_file_link,
-      deedNumber: v.deed_number,
-      deedFileLink: v.deed_file_link,
-      sbuNumber: v.sbu_number,
-      sbuFileLink: v.sbu_file_link,
-      constructionNumber: v.construction_number,
-      constructionFileLink: v.construction_file_link,
-      localTaxNumber: v.local_tax_number,
-      localTaxFileLink: v.local_tax_file_link,
-      corNumber: v.cor_number,
-      corFileLink: v.cor_file_link,
-      gptcNumber: v.gptc_number,
-      gptcFileLink: v.gptc_file_link,
-      otherLicenseFileLink: v.other_license_file_link,
-
       items: v.items.map((vi: any) => ({
         itemCode: vi.master_item?.code,
         itemName: vi.master_item?.name,
@@ -720,7 +747,6 @@ export const vendorsAPI = {
         taxPercentage: vi.wht_percentage || 0,
         propertyTypes: vi.property_types || [],
         selectedPhotos: vi.selected_photos || [],
-        masterPhotos: vi.master_item?.photos || [],
       })),
     }));
   },
@@ -733,20 +759,15 @@ export const vendorsAPI = {
           {
             code: vendor.vendorCode,
             name: vendor.vendorName,
-            // vendor_type: vendor.vendorType, // Removed to avoid Schema Error PGRST204
-
             region: Array.isArray(vendor.vendorRegion)
               ? vendor.vendorRegion
               : [vendor.vendorRegion],
             regional_coverage: vendor.regionalCoverages,
-
             address: vendor.vendorAddress,
             email: vendor.vendorEmail,
-            // email_2: vendor.email2,
             phone: vendor.vendorPhone,
             contact_person:
               vendor.picName || vendor.contact_person,
-
             payment_methods: vendor.paymentMethods,
             ppn_percentage: vendor.ppnPercentage,
             service_charge_percentage:
@@ -756,6 +777,7 @@ export const vendorsAPI = {
             agreement_link: vendor.vendorAgreementLink,
             agreements: vendor.agreements,
 
+            // Legal
             nib_number: vendor.nibNumber,
             nib_file_link: vendor.nibFileLink,
             ktp_number: vendor.ktpNumber,
@@ -767,23 +789,6 @@ export const vendorsAPI = {
             bank_account_number: vendor.bankAccountNumber,
             bank_account_doc_link: vendor.bankAccountDocLink,
             legal_doc_link: vendor.legalDocLink,
-
-            sppkp_number: vendor.sppkpNumber,
-            sppkp_file_link: vendor.sppkpFileLink,
-            deed_number: vendor.deedNumber,
-            deed_file_link: vendor.deedFileLink,
-            sbu_number: vendor.sbuNumber,
-            sbu_file_link: vendor.sbuFileLink,
-            construction_number: vendor.constructionNumber,
-            construction_file_link: vendor.constructionFileLink,
-            local_tax_number: vendor.localTaxNumber,
-            local_tax_file_link: vendor.localTaxFileLink,
-            cor_number: vendor.corNumber,
-            cor_file_link: vendor.corFileLink,
-            gptc_number: vendor.gptcNumber,
-            gptc_file_link: vendor.gptcFileLink,
-            other_license_file_link:
-              vendor.otherLicenseFileLink,
           },
           { onConflict: "code" },
         )
@@ -860,7 +865,12 @@ export const itemsAPI = {
   getAll: async (): Promise<any[]> => {
     const { data, error } = await supabase
       .from("master_items")
-      .select(`*, category:item_categories(name)`)
+      .select(
+        `
+        *,
+        category:item_categories(name)
+      `,
+      )
       .order("name");
 
     if (error) {
@@ -880,8 +890,8 @@ export const itemsAPI = {
       photos: i.photos || [],
       commodityCode: i.commodity_code,
       commodityName: i.commodity_name,
-      itemType: i.item_type || "Product", // Requirement #1
-      weightage: i.weight ?? 0, // Requirement #3 (Allow 0)
+      itemType: i.item_type || "Product",
+      weightage: i.weight,
       physicalSpec: i.physical_spec,
     }));
   },
@@ -901,8 +911,8 @@ export const itemsAPI = {
           photos: item.photos || [],
           commodity_code: item.commodityCode,
           commodity_name: item.commodityName,
-          item_type: item.itemType, // Sync Requirement #1
-          weight: item.weightage, // Sync Requirement #3 (Mapped to 'weight' column)
+          item_type: item.itemType,
+          weight: item.weightage,
           physical_spec: item.physicalSpec,
         },
         { onConflict: "code" },
@@ -934,7 +944,6 @@ export const itemsAPI = {
       .from("master_items")
       .delete()
       .eq("code", code);
-
     if (error) throw error;
   },
 
@@ -967,14 +976,14 @@ export const itemCategoriesAPI = {
     const { data, error } = await supabase
       .from("item_categories")
       .select(`*, items:master_items(count)`)
-      .order("name"); // Ordered alphabetically
+      .order("name");
 
     if (error) throw error;
 
     return data.map((cat: any) => ({
       id: cat.id,
       name: cat.name,
-      isActive: cat.is_active, // FIXED: Explicitly map DB column 'is_active' to frontend prop 'isActive'
+      isActive: cat.is_active,
       itemCount: cat.items?.[0]?.count || 0,
     }));
   },
@@ -987,21 +996,14 @@ export const itemCategoriesAPI = {
       .single();
 
     if (error) throw error;
-
-    // Return mapped object
-    return {
-      ...data,
-      isActive: data.is_active,
-    };
+    return { ...data, isActive: data.is_active };
   },
 
-  // FIXED: Added missing toggleStatus function causing the TypeError
   toggleStatus: async (id: string, isActive: boolean) => {
     const { error } = await supabase
       .from("item_categories")
       .update({ is_active: isActive })
       .eq("id", id);
-
     if (error) throw error;
   },
 
@@ -1010,12 +1012,10 @@ export const itemCategoriesAPI = {
       .from("master_items")
       .update({ category_id: null })
       .eq("category_id", id);
-
     const { error } = await supabase
       .from("item_categories")
       .delete()
       .eq("id", id);
-
     if (error) throw error;
   },
 };

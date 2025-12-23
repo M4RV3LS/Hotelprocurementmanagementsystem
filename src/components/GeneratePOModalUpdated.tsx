@@ -14,7 +14,7 @@ interface GeneratePOModalProps {
   requests: ProcurementRequest[];
 }
 
-// Requirement 2: Allowed Brand List
+// Requirement 2 (Previous): Allowed Brand List
 const ALLOWED_BRANDS = [
   "Reddoorz",
   "Reddoorz Premium",
@@ -40,7 +40,7 @@ interface POData {
   ppnPercentage: number;
   serviceChargePercentage: number;
   pb1Percentage: number;
-  legalEntity: "CSI" | "RMI"; // Added for PO Generation
+  legalEntity: "CSI" | "RMI";
   agreementNumber: string;
   agreementDate: string;
   quotationNumber: string;
@@ -129,10 +129,9 @@ export default function GeneratePOModalUpdated({
     const date = new Date(dateStr);
     const year = date.getFullYear();
     const monthRoman = getRomanMonth(date);
-    const countryCode = "ID"; // Fixed as per requirement
+    const countryCode = "ID";
 
     // Filter existing POs for this Year to find max increment
-    // Regex matches: PO2025(\d{3})...
     const pattern = new RegExp(`^PO${year}(\\d{3})`);
 
     let maxIncrement = 0;
@@ -147,7 +146,6 @@ export default function GeneratePOModalUpdated({
     });
 
     // Increment logic: Start 001, Reset after 999
-    // If max is 999, we wrap to 001 (based on "reset to 001 after 999 maximum")
     let nextIncrement = maxIncrement + 1;
     if (nextIncrement > 999) nextIncrement = 1;
 
@@ -165,7 +163,6 @@ export default function GeneratePOModalUpdated({
     return vendor?.agreements || [];
   }, [vendors, selectedVendor]);
 
-  // ... [Filter Logic remains same] ...
   const getAvailableItems = () => {
     const items: Array<{
       request: ProcurementRequest;
@@ -273,8 +270,13 @@ export default function GeneratePOModalUpdated({
     }
 
     const poDate = new Date().toISOString().split("T")[0];
-    const defaultEntity = "RMI"; // Default
-    const poNumber = generatePONumber(defaultEntity, poDate);
+
+    // --- Requirement 1: Automated Legal Entity Logic ---
+    // Franchise -> RMI, Leasing (and others) -> CSI
+    const entitySuffix: "CSI" | "RMI" =
+      selectedPropertyType === "Franchise" ? "RMI" : "CSI";
+
+    const poNumber = generatePONumber(entitySuffix, poDate);
 
     const vendor = vendors.find(
       (v) => v.vendorName === selectedVendor,
@@ -299,8 +301,8 @@ export default function GeneratePOModalUpdated({
       ppnPercentage: vendor?.ppnPercentage || 11,
       serviceChargePercentage:
         vendor?.serviceChargePercentage || 0,
-      pb1Percentage: 0, // Default 0
-      legalEntity: defaultEntity,
+      pb1Percentage: 0,
+      legalEntity: entitySuffix, // Stored for reference, but not editable
       agreementNumber: "",
       agreementDate: "",
       quotationNumber: "",
@@ -393,17 +395,6 @@ export default function GeneratePOModalUpdated({
   };
 
   const totals = calculateTotals();
-
-  // Handle Entity Change (Recalculate PO Number)
-  const handleEntityChange = (entity: "CSI" | "RMI") => {
-    if (!poData) return;
-    const newPONumber = generatePONumber(entity, poData.poDate);
-    setPOData({
-      ...poData,
-      legalEntity: entity,
-      poNumber: newPONumber,
-    });
-  };
 
   const handleExportPO = () => {
     if (!poData) return;
@@ -627,7 +618,7 @@ export default function GeneratePOModalUpdated({
                 </div>
               </div>
             ) : (
-              // --- PREVIEW STEP (Updated) ---
+              // --- PREVIEW STEP ---
               <div className="space-y-8">
                 {/* Header Information */}
                 <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
@@ -659,23 +650,7 @@ export default function GeneratePOModalUpdated({
                         {poData?.vendorPIC}
                       </div>
                     </div>
-                    <div>
-                      <span className="text-xs text-gray-500 uppercase font-semibold">
-                        Legal Entity (PO Suffix)
-                      </span>
-                      <select
-                        value={poData?.legalEntity}
-                        onChange={(e) =>
-                          handleEntityChange(
-                            e.target.value as "CSI" | "RMI",
-                          )
-                        }
-                        className="mt-1 block w-32 border border-gray-300 rounded-md text-sm px-2 py-1"
-                      >
-                        <option value="RMI">RMI</option>
-                        <option value="CSI">CSI</option>
-                      </select>
-                    </div>
+                    {/* Requirement: Legal Entity Input Removed, displayed as part of PO Number */}
                     <div>
                       <span className="text-xs text-gray-500 uppercase font-semibold">
                         PO Number
@@ -811,13 +786,12 @@ export default function GeneratePOModalUpdated({
                           {formatCurrency(totals.sc)}
                         </span>
                       </div>
-                      {/* Requirement 2: PB1 is NOT editable */}
                       <div className="flex justify-between items-center text-sm">
                         <div className="flex items-center gap-2">
                           <span className="text-gray-600">
                             PB1
                           </span>
-                          {/* Display only, effectively 0 or whatever calculated */}
+                          {/* Read-only PB1 */}
                           <span className="text-gray-500 text-xs bg-gray-200 px-2 py-0.5 rounded">
                             {poData?.pb1Percentage}%
                           </span>
@@ -879,7 +853,6 @@ export default function GeneratePOModalUpdated({
                               {idx + 1}
                             </td>
                             <td className="px-4 py-3">
-                              {/* Requirement 2: Brand must be one from the list */}
                               <select
                                 value={item.brandProperty}
                                 onChange={(e) => {
